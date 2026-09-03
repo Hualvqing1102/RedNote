@@ -6,10 +6,10 @@
 
 ## 技术选型
 
-- 桌面框架：Tauri 2（推荐，打包小、内存低；若更熟 JS 可选 Electron）
+- 桌面框架：Electron（已定，全 JavaScript/TypeScript，便于维护）
 - 前端：React + TypeScript
 - 本地存储：SQLite（单文件、好备份）+ Markdown 正文
-- Agent：云端 API（Claude API），封装统一的 Provider 接口，方便以后替换或加本地模型
+- Agent：统一 Provider 接口，默认 Claude API，后续可接本地部署模型（DeepSeek / Ollama 等，走 OpenAI 兼容端点）
 - 网页解析：本地 Readability 抽取正文，不依赖第三方服务
 
 ## MVP 核心功能（Phase 1）
