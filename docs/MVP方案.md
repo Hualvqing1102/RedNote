@@ -6,10 +6,10 @@
 
 ## 技术选型
 
-- 桌面框架：Electron（已定，全 JavaScript/TypeScript，便于维护）
+- 桌面框架：桌面应用（Python + FastAPI 后台，pywebview 桌面壳）；界面 React + TypeScript + Vite
 - 前端：React + TypeScript
 - 本地存储：SQLite（单文件、好备份）+ Markdown 正文
-- Agent：统一 Provider 接口，默认 Claude API，后续可接本地部署模型（DeepSeek / Ollama 等，走 OpenAI 兼容端点）
+- Agent：统一 Provider 接口，默认 Claude API，可接本地部署模型（DeepSeek / Ollama 等，走 OpenAI 兼容端点）
 - 网页解析：本地 Readability 抽取正文，不依赖第三方服务
 
 ## MVP 核心功能（Phase 1）
