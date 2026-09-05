@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --paper: #f3f3ed;
   --surface: #fbfbf6;
   --ink: #20261f;
@@ -1173,7 +1173,7 @@ a.btn { text-decoration: none; }
 /* ---------- 已确认注释：与“摘要/要点”一致的阅读样式 ---------- */
 .annotate-view { margin: 12px 0 12px 8px; }
 .annotate-view-head {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: flex-end;
   gap: 10px; margin-bottom: 6px;
 }
 .annotate-view-head h4 { margin: 0; }
