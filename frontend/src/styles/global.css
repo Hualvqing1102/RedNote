@@ -939,3 +939,20 @@ textarea {
 
 /* 追问面板内的引擎提示 */
 .ask-panel .engine-note { padding: 0 16px 8px; margin-top: 0; font-size: 12px; }
+
+/* ---------- 摘要/要点块(详情页)与导出 ---------- */
+a.btn { text-decoration: none; }
+.note-summary {
+  margin: 0 0 14px; padding: 12px 16px;
+  background: #f1f4ee; border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.note-summary h4 { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.note-summary p { font-size: 14px; line-height: 1.7; color: var(--ink); }
+.note-summary ul { margin: 0; padding-left: 18px; }
+.note-summary li { font-size: 14px; line-height: 1.7; margin: 3px 0; }
+.export-link { margin-left: auto; flex: none; }
+.data-panel { margin-top: 16px; max-width: 720px; }
+.data-body { padding: 16px 24px 20px; }
+.data-body p { font-size: 13.5px; color: var(--muted); line-height: 1.7; margin-bottom: 12px; }
+.data-actions { display: flex; gap: 10px; flex-wrap: wrap; }

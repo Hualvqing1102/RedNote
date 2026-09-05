@@ -78,6 +78,13 @@ export default function LibraryView() {
             </button>
           ))}
         </div>
+        <a
+          className="btn btn-ghost btn-sm export-link"
+          href="/api/export/notes.md"
+          download="rednote-notes.md"
+        >
+          导出全部 Markdown
+        </a>
       </div>
 
       {error && (

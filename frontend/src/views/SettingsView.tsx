@@ -230,6 +230,26 @@ export default function SettingsView() {
           </button>
         </div>
       </section>
+
+      <section className="panel data-panel">
+        <div className="panel-head">
+          <span className="lbl">数据备份（防锁定）</span>
+        </div>
+        <div className="data-body">
+          <p>
+            数据只保存在你的电脑上（SQLite 单文件）。可以随时下载整库备份，或把全部笔记导出为
+            Markdown——即使离开本应用，数据也始终归你。
+          </p>
+          <div className="data-actions">
+            <a className="btn btn-ghost btn-sm" href="/api/export/backup.db" download="rednote-backup.db">
+              备份数据库（.db）
+            </a>
+            <a className="btn btn-ghost btn-sm" href="/api/export/notes.md" download="rednote-notes.md">
+              导出全部笔记（Markdown）
+            </a>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

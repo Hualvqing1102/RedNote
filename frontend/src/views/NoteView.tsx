@@ -148,6 +148,23 @@ export default function NoteView() {
           </div>
         )}
 
+        {note.summary && (
+          <section className="note-summary" aria-label="摘要">
+            <h4>摘要</h4>
+            <p>{note.summary}</p>
+          </section>
+        )}
+        {note.points.length > 0 && (
+          <section className="note-summary" aria-label="要点">
+            <h4>要点</h4>
+            <ul>
+              {note.points.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {editing ? (
           <textarea
             value={draftText}
@@ -168,6 +185,13 @@ export default function NoteView() {
               编辑
             </button>
           )}
+          <a
+            className="btn btn-ghost"
+            href={`/api/notes/${note.id}/export.md`}
+            download={`note-${note.id}.md`}
+          >
+            导出 Markdown
+          </a>
           <button className="btn btn-ghost danger" onClick={removeNote}>
             删除
           </button>
