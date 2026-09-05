@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
-import { renderParagraphs } from "../lib/markdown";
+import { renderBlocks, withoutLeadingTitle } from "../lib/markdown";
 import { useAppStore } from "../store/useAppStore";
 import type { CollectResult, NoteInput, SettingsResponse, Summary } from "../types";
 
@@ -67,10 +67,12 @@ export default function CollectView() {
     if (!draft) return;
     setSaving(true);
     setError("");
+    // 正文存为 Markdown：去掉与笔记标题重复的正文首行标题，避免详情页重复展示
+    const content = withoutLeadingTitle(draft.collect.content, draft.collect.title);
     const input: NoteInput = {
       title: draft.summary.title,
       summary: draft.summary.summary,
-      content: draft.collect.content,
+      content,
       points: draft.summary.points,
       source_url: draft.collect.source_url,
       source_snapshot: draft.collect.content,
@@ -174,7 +176,7 @@ export default function CollectView() {
               <div className="panel-body article">
                 <h3>{draft.collect.title}</h3>
                 <div className="src">{draft.collect.source_url}</div>
-                {renderParagraphs(draft.collect.content)}
+                {renderBlocks(withoutLeadingTitle(draft.collect.content, draft.collect.title))}
               </div>
             </section>
 

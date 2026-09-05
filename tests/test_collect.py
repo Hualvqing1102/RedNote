@@ -28,9 +28,15 @@ def test_collect_ok(sample_html):
     )
     assert result["title"] == "注意力机制入门"
     assert result["source_url"] == "https://example.com/article"
-    assert "注意力机制让模型在处理当前位置" in result["content"]
+    content = result["content"]
+    # 保留 Markdown 结构：首行为标题，段落间有空行
+    lines = [l for l in content.splitlines() if l.strip()]
+    assert lines[0].lstrip().startswith("#")
+    assert "\n\n" in content
+    assert "注意力机制让模型在处理当前位置" in content
     # 应剔除导航/页脚噪音
-    assert "导航链接" not in result["content"]
+    assert "导航链接" not in content
+    assert "版权信息" not in content
 
 
 def test_collect_bad_scheme():

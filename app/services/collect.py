@@ -31,7 +31,11 @@ async def collect_url(
     url: str,
     http_client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    """抓取 URL 并返回 {title, content, source_url}。content 为纯文本段落。"""
+    """抓取 URL 并返回 {title, content, source_url}。
+
+    content 为 Markdown 文本：保留原标题层级（# / ##）、段落（空行分段）
+    与列表结构，便于人类阅读与二次编辑；图片暂不保存。
+    """
     if not url.startswith(("http://", "https://")):
         raise CollectError("链接必须以 http:// 或 https:// 开头")
 
@@ -55,9 +59,9 @@ async def collect_url(
 
         extracted = trafilatura.extract(
             html,
+            output_format="markdown",
             include_comments=False,
             include_tables=False,
-            include_links=False,
             favor_precision=True,
         )
         if not extracted or not extracted.strip():
