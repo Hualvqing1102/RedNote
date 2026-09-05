@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+data/
+
+# Node / 前端
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# 系统
+.DS_Store
+Thumbs.db
+*.log
