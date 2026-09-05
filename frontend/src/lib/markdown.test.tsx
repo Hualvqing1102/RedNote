@@ -57,6 +57,17 @@ describe("renderBlocks", () => {
     expect(table?.querySelector("tbody tr td")?.textContent).toBe("1a");
   });
 
+  it("渲染无分隔行的管道表格(公众号常见)", () => {
+    const dom = renderBlocksToDom(
+      "| 对比维度 | Prompt | Context |\n| 关注点 | 词句技巧 | 全面上下文 |\n| 作用范围 | 任务描述 | 文档示例规则 |"
+    );
+    const table = dom.querySelector("table");
+    expect(table).not.toBeNull();
+    expect(table?.querySelectorAll("thead th").length).toBe(3);
+    expect(table?.querySelectorAll("tbody tr").length).toBe(2);
+    expect(table?.querySelector("tbody tr:first-child td:nth-child(2)")?.textContent).toBe("词句技巧");
+  });
+
   it("渲染围栏代码块并保留缩进", () => {
     const dom = renderBlocksToDom("```python\ndef f():\n    return 42\n```");
     const pre = dom.querySelector("pre");

@@ -112,6 +112,14 @@ function listDepths(lines: string[], kind: "ul" | "ol"): { items: string[]; dept
   return { items, depths };
 }
 
+function splitCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\||\|$/g, "")
+    .split("|")
+    .map((c) => c.trim());
+}
+
 /** 按空行把整篇 Markdown 切成块，再逐块归类。 */
 export function splitBlocks(text: string): Block[] {
   return text
@@ -139,14 +147,15 @@ export function splitBlocks(text: string): Block[] {
 
       // GFM 表格：首行表头 + 第二行分隔线
       if (lines.length >= 2 && TABLE_SEP_RE.test(lines[1])) {
-        const cell = (line: string) =>
-          line
-            .trim()
-            .replace(/^\||\|$/g, "")
-            .split("|")
-            .map((c) => c.trim());
-        const headers = cell(lines[0]);
-        const rows = lines.slice(2).map(cell);
+        const headers = splitCells(lines[0]);
+        const rows = lines.slice(2).map(splitCells);
+        return { kind: "table", headers, rows };
+      }
+
+      // 兜底：无分隔行的管道表格（如微信公众号常见写法），每行都以 | 起止
+      if (lines.length >= 2 && lines.every((l) => /^\|.*\|\s*$/.test(l))) {
+        const headers = splitCells(lines[0]);
+        const rows = lines.slice(1).map(splitCells);
         return { kind: "table", headers, rows };
       }
 
@@ -213,7 +222,8 @@ export function renderOneBlock(block: Block, index: number): ReactNode {
       return renderList(buildTree(block.items, block.depths ?? []), `ul${index}`, false);
     case "ol":
       return renderList(buildTree(block.items, block.depths ?? []), `ol${index}`, true);
-    case "table":
+    case "table": {
+      const cols = block.headers.length;
       return (
         <div className="md-table-wrap" key={index}>
           <table>
@@ -227,8 +237,8 @@ export function renderOneBlock(block: Block, index: number): ReactNode {
             <tbody>
               {block.rows.map((row, ri) => (
                 <tr key={ri}>
-                  {row.map((cell, ci) => (
-                    <td key={ci}>{renderInline(cell, `td${index}-${ri}-${ci}`)}</td>
+                  {Array.from({ length: cols }, (_, ci) => (
+                    <td key={ci}>{renderInline(row[ci] ?? "", `td${index}-${ri}-${ci}`)}</td>
                   ))}
                 </tr>
               ))}
@@ -236,6 +246,7 @@ export function renderOneBlock(block: Block, index: number): ReactNode {
           </table>
         </div>
       );
+    }
     case "quote":
       return (
         <blockquote key={index}>
