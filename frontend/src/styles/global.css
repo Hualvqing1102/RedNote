@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --paper: #f3f3ed;
   --surface: #fbfbf6;
   --ink: #20261f;
@@ -374,7 +374,7 @@ textarea {
 }
 .result-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -656,7 +656,7 @@ textarea {
   max-width: 1040px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 20px;
   align-items: start;
 }
@@ -1304,3 +1304,35 @@ a.btn { text-decoration: none; }
   margin-bottom: 6px;
   line-height: 1.8;
 }
+
+/* ---------- 防横向溢出：正文长内容可换行、弹性列可收缩 ---------- */
+.content { overflow-x: hidden; }
+.result-grid > *,
+.panel,
+.note-doc,
+.ask-panel,
+.inline-comment,
+.annotate-view { min-width: 0; }
+
+.article,
+.note-doc .body,
+.panel-body,
+.annotate-view,
+.inline-comment {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.note-doc .body a,
+.article a,
+.annotate-links a {
+  overflow-wrap: anywhere;
+}
+.md-pre,
+.md-table-wrap { max-width: 100%; }
+.note-actions,
+.result-actions,
+.setting-actions,
+.comment-actions,
+.data-actions { flex-wrap: wrap; }
+.cc-card-actions { flex-wrap: wrap; }
+.topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
