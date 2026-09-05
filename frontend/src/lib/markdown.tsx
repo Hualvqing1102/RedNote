@@ -88,6 +88,7 @@ export type Block =
   | { kind: "ol"; items: string[]; depths?: number[] }
   | { kind: "quote"; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
+  | { kind: "code"; text: string }
   | { kind: "rule" }
   | { kind: "para"; text: string };
 
@@ -125,6 +126,16 @@ export function splitBlocks(text: string): Block[] {
       if (heading) return { kind: "heading", level: heading[1].length, text: heading[2] };
 
       if (block === "---" || block === "***" || block === "___") return { kind: "rule" };
+
+      // 围栏代码块 ```lang … ```
+      if (block.startsWith("```")) {
+        const codeLines = block.split("\n");
+        codeLines.shift();
+        if (codeLines.length && codeLines[codeLines.length - 1].trim().startsWith("```")) {
+          codeLines.pop();
+        }
+        return { kind: "code", text: codeLines.join("\n") };
+      }
 
       // GFM 表格：首行表头 + 第二行分隔线
       if (lines.length >= 2 && TABLE_SEP_RE.test(lines[1])) {
@@ -232,6 +243,12 @@ export function renderOneBlock(block: Block, index: number): ReactNode {
             <p key={i}>{renderInline(line, `q${index}-${i}`)}</p>
           ))}
         </blockquote>
+      );
+    case "code":
+      return (
+        <pre className="md-pre" key={index}>
+          <code>{block.text}</code>
+        </pre>
       );
     case "rule":
       return <hr key={index} />;

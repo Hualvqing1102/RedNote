@@ -1228,3 +1228,15 @@ a.btn { text-decoration: none; }
 }
 .md-table-wrap thead th { background: #f1f4ee; font-weight: 600; }
 .md-table-wrap tbody tr:nth-child(even) { background: rgba(243, 243, 237, 0.6); }
+
+/* ---------- 围栏代码块 ---------- */
+.md-pre {
+  background: #20261f; color: #e9ede6;
+  border-radius: 8px; padding: 12px 14px;
+  overflow-x: auto; font-size: 13px; line-height: 1.7;
+  margin: 12px 0 16px;
+}
+.note-doc .body pre.md-pre code {
+  background: transparent; color: inherit; padding: 0; font-size: inherit;
+  display: block; white-space: pre;
+}

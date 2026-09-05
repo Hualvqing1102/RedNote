@@ -57,6 +57,18 @@ describe("renderBlocks", () => {
     expect(table?.querySelector("tbody tr td")?.textContent).toBe("1a");
   });
 
+  it("渲染围栏代码块并保留缩进", () => {
+    const dom = renderBlocksToDom("```python\ndef f():\n    return 42\n```");
+    const pre = dom.querySelector("pre");
+    expect(pre).not.toBeNull();
+    expect(pre?.querySelector("code")?.textContent).toBe("def f():\n    return 42");
+  });
+
+  it("行内代码与正文区分显示", () => {
+    const dom = renderBlocksToDom("调用 `run()` 完成");
+    expect(dom.querySelector("code")?.textContent).toBe("run()");
+  });
+
   it("缩进嵌套列表渲染为嵌套结构", () => {
     const dom = renderBlocksToDom("- 父项\n  - 子项一\n  - 子项二\n- 另一父项");
     const outerItems = dom.querySelector("ul")?.children;
