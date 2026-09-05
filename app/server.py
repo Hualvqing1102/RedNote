@@ -123,16 +123,32 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
 
     # ------------------------------------------------ Agent
 
+    def _current_provider():
+        from app.services import providers
+
+        cfg = settings_store.load(_settings_path())
+        return providers.build_provider(cfg)
+
     @app.post("/api/agent/summarize")
     async def summarize(payload: SummarizeIn) -> dict[str, Any]:
-        return await agent_service.summarize(payload.title, payload.content)
+        try:
+            return await agent_service.summarize(
+                payload.title, payload.content, provider=_current_provider()
+            )
+        except agent_service.AgentError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.post("/api/agent/ask")
     async def ask(payload: AskIn) -> dict[str, Any]:
         note = notes_service.get_note(_path(), payload.note_id)
         if not note:
             raise HTTPException(status_code=404, detail="笔记不存在")
-        answer = await agent_service.ask(note, payload.question)
+        try:
+            answer = await agent_service.ask(
+                note, payload.question, provider=_current_provider()
+            )
+        except agent_service.AgentError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {"answer": answer}
 
     # ------------------------------------------------ 笔记
