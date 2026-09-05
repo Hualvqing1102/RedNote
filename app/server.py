@@ -6,6 +6,7 @@ from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app import config
@@ -13,6 +14,7 @@ from app import settings as settings_store
 from app.db import init_db
 from app.services import agent as agent_service
 from app.services import collect as collect_service
+from app.services import export as export_service
 from app.services import notes as notes_service
 from app.services.collect import CollectError
 
@@ -190,6 +192,41 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
     @app.get("/api/tags")
     def tags() -> list[str]:
         return notes_service.list_tags(_path())
+
+    # ------------------------------------------------ 导出 / 备份
+
+    def _attachment(filename: str) -> dict[str, str]:
+        return {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    @app.get("/api/export/notes.md")
+    def export_notes_md() -> Response:
+        notes = notes_service.list_notes(_path())
+        body = export_service.notes_to_markdown(notes)
+        return Response(
+            content=body,
+            media_type="text/markdown; charset=utf-8",
+            headers=_attachment("rednote-notes.md"),
+        )
+
+    @app.get("/api/notes/{note_id}/export.md")
+    def export_note_md(note_id: int) -> Response:
+        note = notes_service.get_note(_path(), note_id)
+        if not note:
+            raise HTTPException(status_code=404, detail="笔记不存在")
+        return Response(
+            content=export_service.note_to_markdown(note),
+            media_type="text/markdown; charset=utf-8",
+            headers=_attachment(f"note-{note_id}.md"),
+        )
+
+    @app.get("/api/export/backup.db")
+    def export_backup_db() -> Response:
+        payload = export_service.sqlite_backup_bytes(_path())
+        return Response(
+            content=payload,
+            media_type="application/vnd.sqlite3",
+            headers=_attachment("rednote-backup.db"),
+        )
 
     return app
 
