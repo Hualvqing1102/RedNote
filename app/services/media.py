@@ -36,13 +36,13 @@ def insert(
     data: bytes,
     note_id: int | None = None,
 ) -> str:
-    """保存一张图(按 URL 去重)，返回 token。"""
+    """保存一张图(按 URL 去重，幂等)，返回 token。"""
     token = token_for(url)
     now = int(time.time())
     with connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO media (token, note_id, url, mime, alt, data, created_at)
+            INSERT OR IGNORE INTO media (token, note_id, url, mime, alt, data, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (token, note_id, url, mime, alt, sqlite3.Binary(data), now),
