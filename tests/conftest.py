@@ -16,11 +16,17 @@ def db_path(tmp_path):
 
 
 @pytest.fixture
-def client(db_path):
-    """基于临时数据库的 FastAPI 测试客户端。"""
+def settings_path(tmp_path):
+    """独立的临时 settings.json 路径，避免测试读写真实用户配置。"""
+    return tmp_path / "settings.json"
+
+
+@pytest.fixture
+def client(db_path, settings_path):
+    """基于临时数据库与临时设置的 FastAPI 测试客户端。"""
     from app.server import create_app
 
-    app = create_app(str(db_path))
+    app = create_app(str(db_path), str(settings_path))
     with TestClient(app) as c:
         yield c
 

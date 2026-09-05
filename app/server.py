@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app import config
+from app import settings as settings_store
 from app.db import init_db
 from app.services import agent as agent_service
 from app.services import collect as collect_service
@@ -53,8 +54,21 @@ class NotePatch(BaseModel):
     tags: list[str] | None = None
 
 
-def create_app(db_path: str | None = None) -> FastAPI:
+class ProviderGroup(BaseModel):
+    model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+class SettingsIn(BaseModel):
+    provider: str | None = None
+    claude: ProviderGroup | None = None
+    openai: ProviderGroup | None = None
+
+
+def create_app(db_path: str | None = None, settings_path: str | None = None) -> FastAPI:
     db_path = db_path or str(config.db_path())
+    settings_path = settings_path or str(settings_store.settings_path())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -63,6 +77,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     app = FastAPI(title="RedNote", lifespan=lifespan)
     app.state.db_path = db_path
+    app.state.settings_path = settings_path
 
     app.add_middleware(
         CORSMiddleware,
@@ -74,6 +89,28 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     def _path() -> str:
         return app.state.db_path
+
+    def _settings_path() -> str:
+        return app.state.settings_path
+
+    # ------------------------------------------------ 设置
+
+    @app.get("/api/settings")
+    def get_settings() -> dict[str, Any]:
+        cfg = settings_store.load(_settings_path())
+        return {"settings": settings_store.public_view(cfg), "active": settings_store.active_provider(cfg)}
+
+    @app.put("/api/settings")
+    def put_settings(payload: SettingsIn) -> dict[str, Any]:
+        patch = payload.model_dump(exclude_unset=True)
+        # 去除未提供的嵌套空组，避免误清空已有配置
+        patch = {k: v for k, v in patch.items() if v is not None}
+        try:
+            cfg = settings_store.apply_patch(patch, _settings_path())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        settings_store.save(cfg, _settings_path())
+        return {"settings": settings_store.public_view(cfg), "active": settings_store.active_provider(cfg)}
 
     # ------------------------------------------------ 采集
 
