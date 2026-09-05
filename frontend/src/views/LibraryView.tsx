@@ -237,6 +237,10 @@ export default function LibraryView() {
               <div className="kind">笔记 · {formatDate(note.created_at)}</div>
               <h3>{note.title}</h3>
               <div className="snippet">{note.summary || note.content.slice(0, 120)}</div>
+              <div className="meta">
+                <span className="src">{note.source_url || "无来源"}</span>
+                <span>{note.points.length} 要点</span>
+              </div>
               <div className="note-folder" onClick={(e) => e.stopPropagation()}>
                 <select
                   aria-label={`设置笔记「${note.title}」的收藏夹`}
@@ -250,10 +254,6 @@ export default function LibraryView() {
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="meta">
-                <span className="src">{note.source_url || "无来源"}</span>
-                <span>{note.points.length} 要点</span>
               </div>
               <button
                 className="card-delete"
