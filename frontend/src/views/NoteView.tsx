@@ -62,6 +62,8 @@ export default function NoteView() {
   const [menu, setMenu] = useState<CtxMenu | null>(null);
   const [focusCardId, setFocusCardId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+  // 处于“编辑中”的注释卡（未确认前显示输入框；确认后显示为摘要卡片样式）
+  const [editIds, setEditIds] = useState<Set<string>>(new Set());
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
@@ -262,8 +264,50 @@ export default function NoteView() {
     if (!note) return;
     const id = newCardId();
     const blocks = splitBlocks(note.content).length;
-    touchComments([...comments, { id, text: "", links: [], anchor: Math.min(blockIndex, blocks - 1) }]);
+    setComments((prev) => [
+      ...prev,
+      { id, text: "", links: [], anchor: Math.min(blockIndex, blocks - 1) },
+    ]);
+    setEditIds((prev) => new Set(prev).add(id));
+    setCommentsDirty(true);
     setFocusCardId(id);
+  }
+
+  function enterEdit(id: string) {
+    setEditIds((prev) => new Set(prev).add(id));
+  }
+
+  function exitEdit(id: string) {
+    setEditIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  // 确认：立即保存并切换到“摘要卡片”阅读样式
+  async function confirmComment(id: string) {
+    if (!note) return;
+    const card = commentsRef.current.find((c) => c.id === id);
+    if (!card || (!card.text.trim() && card.links.length === 0)) {
+      removeComment(id);
+      return;
+    }
+    exitEdit(id);
+    const snapshot = JSON.stringify(commentsRef.current);
+    setSaveState("idle");
+    try {
+      const cleaned = commentsRef.current.filter(
+        (c) => c.text.trim() || c.links.some((l) => l.url.trim())
+      );
+      await api.updateNote(note.id, { comments: cleaned });
+      if (JSON.stringify(commentsRef.current) === snapshot) {
+        setCommentsDirty(false);
+        setSaveState("saved");
+      }
+    } catch {
+      setSaveState("error");
+    }
   }
 
   function removeComment(id: string) {
@@ -428,74 +472,119 @@ export default function NoteView() {
                     const card = comments.find((c) => `c:${c.id}` === row.key);
                     if (!card) return null;
                     const num = cardOrder.get(card.id) ?? 0;
+                    if (editIds.has(card.id)) {
+                      return (
+                        <div
+                          key={row.key}
+                          data-row={row.key}
+                          data-cid={card.id}
+                          className={`inline-comment${dragId === card.id ? " dragging" : ""}`}
+                        >
+                          <div className="inline-comment-head">
+                            <button
+                              className="grip"
+                              title="拖动移动到其他段落"
+                              aria-label={`移动注释${num}`}
+                              onPointerDown={(e) => {
+                                e.preventDefault();
+                                setDragId(card.id);
+                              }}
+                            >
+                              ⣿
+                            </button>
+                            <span className="tag">第 {row.anchor + 1} 段批注</span>
+                            <span className="spacer" />
+                            <button
+                              className="head-btn danger"
+                              aria-label={`删除注释${num}`}
+                              onClick={() => removeComment(card.id)}
+                            >
+                              删除
+                            </button>
+                          </div>
+                          <textarea
+                            value={card.text}
+                            placeholder="写下你的注释/想法…"
+                            aria-label={`注释${num}正文`}
+                            onChange={(e) => patchComment(card.id, { text: e.target.value })}
+                          />
+                          {card.links.map((link, j) => (
+                            <div className="cc-link" key={j}>
+                              <input
+                                type="text"
+                                value={link.title}
+                                placeholder="链接标题"
+                                aria-label={`注释${num}链接${j + 1}标题`}
+                                onChange={(e) => patchLink(card.id, j, { title: e.target.value })}
+                              />
+                              <input
+                                type="url"
+                                value={link.url}
+                                placeholder="https://…"
+                                aria-label={`注释${num}链接${j + 1}地址`}
+                                onChange={(e) => patchLink(card.id, j, { url: e.target.value })}
+                              />
+                              <button
+                                className="link-remove"
+                                aria-label={`删除注释${num}的链接${j + 1}`}
+                                onClick={() => removeLink(card.id, j)}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                          <div className="cc-card-actions">
+                            <button className="btn btn-ghost btn-sm" onClick={() => addLink(card.id)}>
+                              ＋ 添加相关链接
+                            </button>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              aria-label={`确认注释${num}`}
+                              onClick={() => confirmComment(card.id)}
+                            >
+                              确认
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div
                         key={row.key}
                         data-row={row.key}
                         data-cid={card.id}
-                        className={`inline-comment${dragId === card.id ? " dragging" : ""}`}
+                        className="note-summary annotate-view"
                       >
-                        <div className="inline-comment-head">
-                          <button
-                            className="grip"
-                            title="拖动移动到其他段落"
-                            aria-label={`移动注释${num}`}
-                            onPointerDown={(e) => {
-                              e.preventDefault();
-                              setDragId(card.id);
-                            }}
-                          >
-                            ⣿
-                          </button>
-                          <span className="tag">第 {row.anchor + 1} 段批注</span>
-                          <span className="spacer" />
-                          <button
-                            className="head-btn danger"
-                            aria-label={`删除注释${num}`}
-                            onClick={() => removeComment(card.id)}
-                          >
-                            删除
-                          </button>
-                        </div>
-                        <textarea
-                          value={card.text}
-                          placeholder="写下你的注释/想法…"
-                          aria-label={`注释${num}正文`}
-                          onChange={(e) => patchComment(card.id, { text: e.target.value })}
-                        />
-                        {card.links.map((link, j) => (
-                          <div className="cc-link" key={j}>
-                            <input
-                              type="text"
-                              value={link.title}
-                              placeholder="链接标题"
-                              aria-label={`注释${num}链接${j + 1}标题`}
-                              onChange={(e) => patchLink(card.id, j, { title: e.target.value })}
-                            />
-                            <input
-                              type="url"
-                              value={link.url}
-                              placeholder="https://…"
-                              aria-label={`注释${num}链接${j + 1}地址`}
-                              onChange={(e) => patchLink(card.id, j, { url: e.target.value })}
-                            />
+                        <div className="annotate-view-head">
+                          <h4>第 {row.anchor + 1} 段批注</h4>
+                          <div className="annotate-view-actions">
                             <button
-                              className="link-remove"
-                              aria-label={`删除注释${num}的链接${j + 1}`}
-                              onClick={() => removeLink(card.id, j)}
+                              aria-label={`编辑注释${num}`}
+                              onClick={() => enterEdit(card.id)}
                             >
-                              ×
+                              编辑
+                            </button>
+                            <button
+                              className="danger"
+                              aria-label={`删除注释${num}`}
+                              onClick={() => removeComment(card.id)}
+                            >
+                              删除
                             </button>
                           </div>
-                        ))}
-                        <div className="cc-card-actions">
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => addLink(card.id)}
-                          >
-                            ＋ 添加相关链接
-                          </button>
                         </div>
+                        {card.text && <p>{card.text}</p>}
+                        {card.links.length > 0 && (
+                          <ul className="annotate-links">
+                            {card.links.map((l, j) => (
+                              <li key={j}>
+                                <a href={l.url} target="_blank" rel="noreferrer">
+                                  {l.title || l.url}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     );
                   })()
