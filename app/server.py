@@ -15,7 +15,6 @@ from app.db import init_db
 from app.services import agent as agent_service
 from app.services import collect as collect_service
 from app.services import export as export_service
-from app.services import media as media_service
 from app.services import notes as notes_service
 from app.services.collect import CollectError
 
@@ -121,7 +120,7 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
     @app.post("/api/collect")
     async def collect(payload: CollectIn) -> dict[str, Any]:
         try:
-            return await collect_service.collect_url(payload.url, db_path=_path())
+            return await collect_service.collect_url(payload.url)
         except CollectError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -197,18 +196,12 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
 
     # ------------------------------------------------ 导出 / 备份
 
-    def _with_local_images(note: dict[str, Any]) -> dict[str, Any]:
-        """导出前把本地图片引用替换为 data URI，保证 .md 单文件可看。"""
-        if note.get("content"):
-            note = {**note, "content": media_service.replace_with_data_uris(_path(), note["content"])}
-        return note
-
     def _attachment(filename: str) -> dict[str, str]:
         return {"Content-Disposition": f'attachment; filename="{filename}"'}
 
     @app.get("/api/export/notes.md")
     def export_notes_md() -> Response:
-        notes = [_with_local_images(n) for n in notes_service.list_notes(_path())]
+        notes = notes_service.list_notes(_path())
         body = export_service.notes_to_markdown(notes)
         return Response(
             content=body,
@@ -222,22 +215,9 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
         if not note:
             raise HTTPException(status_code=404, detail="笔记不存在")
         return Response(
-            content=export_service.note_to_markdown(_with_local_images(note)),
+            content=export_service.note_to_markdown(note),
             media_type="text/markdown; charset=utf-8",
             headers=_attachment(f"note-{note_id}.md"),
-        )
-
-    # ------------------------------------------------ 图片
-
-    @app.get("/media/{token}")
-    def media_file(token: str) -> Response:
-        media = media_service.get(_path(), token)
-        if not media:
-            raise HTTPException(status_code=404, detail="图片不存在")
-        return Response(
-            content=media["data"],
-            media_type=media["mime"],
-            headers={"Cache-Control": "public, max-age=86400"},
         )
 
     @app.get("/api/export/backup.db")
