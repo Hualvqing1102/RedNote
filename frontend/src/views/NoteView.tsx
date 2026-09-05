@@ -5,7 +5,7 @@ import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
 import { relocateComment, rowsFor } from "../lib/annotations";
 import { useAppStore } from "../store/useAppStore";
-import type { CommentCard, Note, SettingsResponse } from "../types";
+import type { CommentCard, Folder, Note, SettingsResponse } from "../types";
 
 interface Msg {
   role: "user" | "ai";
@@ -55,6 +55,7 @@ export default function NoteView() {
   const [error, setError] = useState("");
   const [engine, setEngine] = useState<SettingsResponse | null>(null);
   const [engineError, setEngineError] = useState(false);
+  const [foldersState, setFoldersState] = useState<Folder[]>([]);
 
   // 注释：内联锚定在正文段落之后
   const [comments, setComments] = useState<CommentCard[]>([]);
@@ -107,6 +108,7 @@ export default function NoteView() {
       .getSettings()
       .then(setEngine)
       .catch(() => setEngineError(true));
+    api.listFolders().then(setFoldersState).catch(() => {});
   }, [noteId]);
 
   useEffect(() => {
@@ -243,6 +245,19 @@ export default function NoteView() {
       setError(e instanceof Error ? e.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function assignFolder(value: string) {
+    if (!note) return;
+    setError("");
+    const folder_id = value === "" ? null : Number(value);
+    try {
+      const updated = await api.updateNote(note.id, { folder_id });
+      setNote(updated);
+      api.listFolders().then(setFoldersState).catch(() => {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "收藏夹更新失败");
     }
   }
 
@@ -454,15 +469,21 @@ export default function NoteView() {
           )}
         </div>
         <h2>{note.title}</h2>
-        {note.tags.length > 0 && (
-          <div className="tag-row">
-            {note.tags.map((t) => (
-              <span className="tag" key={t}>
-                {t}
-              </span>
+        <div className="folder-picker">
+          <span className="lbl">收藏夹</span>
+          <select
+            aria-label="移动到收藏夹"
+            value={note.folder_id === null ? "" : String(note.folder_id)}
+            onChange={(e) => assignFolder(e.target.value)}
+          >
+            <option value="">未分类</option>
+            {foldersState.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
             ))}
-          </div>
-        )}
+          </select>
+        </div>
 
         {error && (
           <div className="error-banner" role="alert">

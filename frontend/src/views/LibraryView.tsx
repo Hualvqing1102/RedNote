@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
-import type { Note } from "../types";
+import type { Folder, Note } from "../types";
 
 function formatDate(epoch: number): string {
   const d = new Date(epoch * 1000);
@@ -12,14 +12,24 @@ function formatDate(epoch: number): string {
 export default function LibraryView() {
   const openNote = useAppStore((s) => s.openNote);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [q, setQ] = useState("");
-  const [tag, setTag] = useState("全部");
+  const [folderId, setFolderId] = useState<number | null>(null); // null = 全部
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [managing, setManaging] = useState(false);
+
+  function refreshFolders() {
+    api
+      .listFolders()
+      .then(setFolders)
+      .catch(() => setError("收藏夹加载失败"));
+  }
 
   useEffect(() => {
-    api.listTags().then(setTags).catch(() => {});
+    refreshFolders();
   }, []);
 
   useEffect(() => {
@@ -28,7 +38,7 @@ export default function LibraryView() {
       try {
         const list = await api.listNotes({
           q: q.trim() || undefined,
-          tag: tag === "全部" ? undefined : tag,
+          folder: folderId ?? undefined,
         });
         setNotes(list);
         setError("");
@@ -39,13 +49,48 @@ export default function LibraryView() {
       }
     }, q ? 200 : 0);
     return () => clearTimeout(timer);
-  }, [q, tag]);
+  }, [q, folderId]);
 
   async function removeNote(id: number) {
     if (!window.confirm("确定删除这篇笔记吗？此操作不可恢复。")) return;
     try {
       await api.deleteNote(id);
       setNotes((list) => list.filter((n) => n.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
+  async function submitCreate() {
+    const name = newName.trim();
+    if (!name) return;
+    try {
+      await api.createFolder(name);
+      setNewName("");
+      setCreating(false);
+      refreshFolders();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "创建失败");
+    }
+  }
+
+  async function renameFolder(folder: Folder) {
+    const name = window.prompt("重命名收藏夹", folder.name);
+    if (!name || !name.trim()) return;
+    try {
+      await api.renameFolder(folder.id, name.trim());
+      refreshFolders();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "重命名失败");
+    }
+  }
+
+  async function removeFolder(folder: Folder) {
+    if (!window.confirm(`删除收藏夹「${folder.name}」？其中的笔记会回到「全部」。`)) return;
+    try {
+      await api.deleteFolder(folder.id);
+      if (folderId === folder.id) setFolderId(null);
+      refreshFolders();
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除失败");
     }
@@ -67,17 +112,6 @@ export default function LibraryView() {
             aria-label="搜索笔记"
           />
         </div>
-        <div className="filters">
-          {["全部", ...tags].map((t) => (
-            <button
-              key={t}
-              className={`fchip${tag === t ? " active" : ""}`}
-              onClick={() => setTag(t)}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
         <a
           className="btn btn-ghost btn-sm export-link"
           href="/api/export/notes.md"
@@ -85,6 +119,84 @@ export default function LibraryView() {
         >
           导出全部 Markdown
         </a>
+      </div>
+
+      <div className="filters" aria-label="收藏夹筛选">
+        <button
+          className={`fchip${folderId === null ? " active" : ""}`}
+          onClick={() => {
+            setFolderId(null);
+            setManaging(false);
+          }}
+        >
+          全部
+        </button>
+        {folders.map((f) => (
+          <span className="folder-chip-wrap" key={f.id}>
+            <button
+              className={`fchip${folderId === f.id ? " active" : ""}`}
+              onClick={() => {
+                setFolderId(f.id);
+                setManaging(false);
+              }}
+              title={`${f.name}（${f.note_count} 篇）`}
+            >
+              {f.name}
+              <span className="chip-count">{f.note_count}</span>
+            </button>
+            {managing && (
+              <>
+                <button
+                  className="chip-op"
+                  aria-label={`重命名收藏夹${f.name}`}
+                  title="重命名"
+                  onClick={() => renameFolder(f)}
+                >
+                  ✎
+                </button>
+                <button
+                  className="chip-op danger"
+                  aria-label={`删除收藏夹${f.name}`}
+                  title="删除"
+                  onClick={() => removeFolder(f)}
+                >
+                  ×
+                </button>
+              </>
+            )}
+          </span>
+        ))}
+        {creating ? (
+          <span className="folder-create">
+            <input
+              value={newName}
+              autoFocus
+              placeholder="收藏夹名称"
+              aria-label="新收藏夹名称"
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submitCreate()}
+            />
+            <button className="btn btn-primary btn-sm" onClick={submitCreate}>
+              确定
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setCreating(false)}>
+              取消
+            </button>
+          </span>
+        ) : (
+          <button className="fchip add-folder" onClick={() => setCreating(true)}>
+            ＋ 新建收藏夹
+          </button>
+        )}
+        {folders.length > 0 && (
+          <button
+            className="btn btn-ghost btn-sm manage-folder"
+            aria-pressed={managing}
+            onClick={() => setManaging((m) => !m)}
+          >
+            {managing ? "完成" : "管理"}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -98,7 +210,7 @@ export default function LibraryView() {
       ) : notes.length === 0 ? (
         <div className="empty">
           <div className="big">没有匹配的笔记</div>
-          <p>换个关键词或筛选条件，或去「采集」页新增一篇。</p>
+          <p>换个关键词或收藏夹，或去「采集」页新增一篇。</p>
         </div>
       ) : (
         <div className="cards">
@@ -108,15 +220,6 @@ export default function LibraryView() {
               <div className="kind">笔记 · {formatDate(note.created_at)}</div>
               <h3>{note.title}</h3>
               <div className="snippet">{note.summary || note.content.slice(0, 120)}</div>
-              {note.tags.length > 0 && (
-                <div className="tags">
-                  {note.tags.map((t) => (
-                    <span className="tag" key={t}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              )}
               <div className="meta">
                 <span className="src">{note.source_url || "无来源"}</span>
                 <span>{note.points.length} 要点</span>

@@ -1,6 +1,7 @@
 import type {
   CollectResult,
   CommentCard,
+  Folder,
   Note,
   NoteInput,
   SettingsPatch,
@@ -29,7 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface NoteFilter {
   q?: string;
-  tag?: string;
+  folder?: number;
 }
 
 export type NotePatch = Partial<NoteInput> & { comments?: CommentCard[] };
@@ -53,7 +54,7 @@ export const api = {
   listNotes: (filter: NoteFilter = {}): Promise<Note[]> => {
     const qs = new URLSearchParams();
     if (filter.q) qs.set("q", filter.q);
-    if (filter.tag) qs.set("tag", filter.tag);
+    if (typeof filter.folder === "number") qs.set("folder", String(filter.folder));
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return request(`/api/notes${suffix}`);
   },
@@ -69,7 +70,16 @@ export const api = {
   deleteNote: (id: number): Promise<void> =>
     request(`/api/notes/${id}`, { method: "DELETE" }),
 
-  listTags: (): Promise<string[]> => request("/api/tags"),
+  listFolders: (): Promise<Folder[]> => request("/api/folders"),
+
+  createFolder: (name: string): Promise<Folder> =>
+    request("/api/folders", { method: "POST", body: JSON.stringify({ name }) }),
+
+  renameFolder: (id: number, name: string): Promise<Folder> =>
+    request(`/api/folders/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+
+  deleteFolder: (id: number): Promise<void> =>
+    request(`/api/folders/${id}`, { method: "DELETE" }),
 
   getSettings: (): Promise<SettingsResponse> => request("/api/settings"),
 

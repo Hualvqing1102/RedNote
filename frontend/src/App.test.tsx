@@ -7,7 +7,7 @@ import type { Note } from "./types";
 vi.mock("./api/client", () => ({
   api: {
     listNotes: vi.fn(),
-    listTags: vi.fn(),
+    listFolders: vi.fn(),
   },
 }));
 
@@ -19,15 +19,15 @@ const note: Note = {
   points: ["要点一"],
   source_url: "https://example.com/note",
   source_snapshot: "快照",
+  folder_id: null,
   created_at: 1700000000,
   updated_at: 1700000000,
-  tags: ["测试"],
 };
 
 describe("App", () => {
   beforeEach(() => {
     vi.mocked(api.listNotes).mockReset().mockResolvedValue([note]);
-    vi.mocked(api.listTags).mockReset().mockResolvedValue(["测试"]);
+    vi.mocked(api.listFolders).mockReset().mockResolvedValue([]);
   });
 
   it("渲染侧栏品牌与采集页", () => {

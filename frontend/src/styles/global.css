@@ -1469,3 +1469,32 @@ a.btn { text-decoration: none; }
 @media (max-width: 900px) {
   .note-layout.has-outline { grid-template-columns: minmax(0, 1fr); }
 }
+/* ---------- 收藏夹(替代标签) ---------- */
+.folder-chip-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.chip-count {
+  font-size: 10px; margin-left: 4px; opacity: 0.7;
+}
+.chip-op {
+  font-size: 12px; color: var(--muted);
+  width: 22px; height: 22px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.chip-op:hover { color: var(--ink); }
+.chip-op.danger:hover { color: #a33; border-color: #e0c0c0; }
+.fchip.add-folder { border-style: dashed; color: var(--green-deep); }
+.manage-folder { flex: none; }
+.folder-create { display: inline-flex; align-items: center; gap: 6px; }
+.folder-create input {
+  width: 130px; border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 9px; font-size: 12.5px;
+}
+.folder-picker {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 0 2px; font-size: 13px;
+}
+.folder-picker .lbl { color: var(--muted); font-size: 12px; }
+.folder-picker select {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 4px 8px; font-size: 13px; background: var(--surface); color: var(--ink);
+  max-width: 260px;
+}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
@@ -9,6 +9,7 @@ vi.mock("../api/client", () => ({
   api: {
     getNote: vi.fn(),
     getSettings: vi.fn(),
+    listFolders: vi.fn(),
     updateNote: vi.fn(),
     ask: vi.fn(),
     deleteNote: vi.fn(),
@@ -30,7 +31,7 @@ const NOTES: Record<number, Note> = {
     source_snapshot: "x",
     created_at: 1700000000,
     updated_at: 1700000000,
-    tags: ["AI"],
+    folder_id: null,
   },
   2: {
     id: 2,
@@ -43,7 +44,7 @@ const NOTES: Record<number, Note> = {
     source_snapshot: "",
     created_at: 1700000000,
     updated_at: 1700000000,
-    tags: [],
+    folder_id: null,
   },
 };
 
@@ -61,6 +62,7 @@ describe("NoteView 内联注释(编辑/确认)", () => {
     useAppStore.setState({ view: "note", activeNoteId: 1 });
     vi.mocked(api.getNote).mockReset().mockImplementation((id) => Promise.resolve(NOTES[id]));
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(ENGINE);
+    vi.mocked(api.listFolders).mockReset().mockResolvedValue([]);
     vi.mocked(api.updateNote).mockReset().mockImplementation((id, patch) => {
       const updated: Note = { ...NOTES[id], comments: patch.comments as CommentCard[] };
       return Promise.resolve(updated);

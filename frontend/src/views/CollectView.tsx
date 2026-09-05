@@ -14,7 +14,7 @@ const EXAMPLES = [
 const STEPS = [
   { label: "正在读取网页正文…", sub: "从页面中剔除广告与导航" },
   { label: "Agent 正在提炼要点与摘要…", sub: "按设置的 Provider 生成" },
-  { label: "生成建议标签…", sub: "保存后仍可修改" },
+  { label: "整理为笔记草稿…", sub: "确认后可保存" },
 ];
 
 type Phase = 0 | 1 | 2 | 3 | 4; // 0=空闲/出错, 1~3=分步进行中, 4=完成
@@ -76,7 +76,6 @@ export default function CollectView() {
       points: draft.summary.points,
       source_url: draft.collect.source_url,
       source_snapshot: draft.collect.content,
-      tags: draft.summary.tags,
     };
     try {
       await api.createNote(input);
@@ -197,15 +196,6 @@ export default function CollectView() {
                         <li key={i}>{p}</li>
                       ))}
                     </ul>
-                  </div>
-                )}
-                {draft.summary.tags.length > 0 && (
-                  <div className="tag-row">
-                    {draft.summary.tags.map((t) => (
-                      <span className="tag" key={t}>
-                        {t}
-                      </span>
-                    ))}
                   </div>
                 )}
                 <div className="result-actions">

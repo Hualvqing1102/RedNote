@@ -52,7 +52,6 @@ describe("CollectView", () => {
       title: "Transformer 讲解",
       summary: "这是一段摘要",
       points: ["要点一"],
-      tags: ["AI"],
     });
     vi.mocked(api.createNote).mockResolvedValue({
       id: 7,
@@ -62,9 +61,9 @@ describe("CollectView", () => {
       points: ["要点一"],
       source_url: "https://example.com/a",
       source_snapshot: "x",
+      folder_id: null,
       created_at: 1700000000,
       updated_at: 1700000000,
-      tags: ["AI"],
     });
 
     render(<CollectView />);
@@ -100,7 +99,7 @@ describe("CollectView", () => {
       content: "正文",
       source_url: "https://example.com/a",
     });
-    vi.mocked(api.summarize).mockResolvedValue({ title: "t", summary: "s", points: [], tags: [] });
+    vi.mocked(api.summarize).mockResolvedValue({ title: "t", summary: "s", points: [] });
 
     render(<CollectView />);
     fireEvent.change(screen.getByLabelText("网页链接"), {

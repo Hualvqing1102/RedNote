@@ -9,6 +9,7 @@ vi.mock("../api/client", () => ({
   api: {
     getNote: vi.fn(),
     getSettings: vi.fn(),
+    listFolders: vi.fn(),
     updateNote: vi.fn(),
     ask: vi.fn(),
     deleteNote: vi.fn(),
@@ -23,9 +24,9 @@ const NOTE: Note = {
   points: ["要点一", "要点二"],
   source_url: "https://example.com/n",
   source_snapshot: "x",
+  folder_id: null,
   created_at: 1700000000,
   updated_at: 1700000000,
-  tags: ["AI"],
 };
 
 const ENGINE: SettingsResponse = {
@@ -42,6 +43,7 @@ describe("NoteView", () => {
     useAppStore.setState({ view: "note", activeNoteId: 1 });
     vi.mocked(api.getNote).mockReset().mockResolvedValue(NOTE);
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(ENGINE);
+    vi.mocked(api.listFolders).mockReset().mockResolvedValue([]);
     vi.mocked(api.updateNote).mockReset();
     vi.mocked(api.ask).mockReset();
     vi.mocked(api.deleteNote).mockReset();

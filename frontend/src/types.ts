@@ -11,6 +11,12 @@ export interface CommentCard {
   anchor?: number;
 }
 
+export interface Folder {
+  id: number;
+  name: string;
+  note_count: number;
+}
+
 export interface Note {
   id: number;
   title: string;
@@ -20,9 +26,10 @@ export interface Note {
   comments?: CommentCard[];
   source_url: string;
   source_snapshot: string;
+  folder_id: number | null;
+  folder_name?: string;
   created_at: number;
   updated_at: number;
-  tags: string[];
 }
 
 export interface NoteInput {
@@ -30,9 +37,10 @@ export interface NoteInput {
   summary: string;
   content: string;
   points: string[];
+  comments?: CommentCard[];
   source_url: string;
   source_snapshot: string;
-  tags: string[];
+  folder_id?: number | null;
 }
 
 export interface CollectResult {
@@ -45,7 +53,6 @@ export interface Summary {
   title: string;
   summary: string;
   points: string[];
-  tags: string[];
 }
 
 export type ProviderName = "mock" | "claude" | "openai";
