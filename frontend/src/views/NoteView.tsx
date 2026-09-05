@@ -55,7 +55,10 @@ export default function NoteView() {
   }, [noteId]);
 
   useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
+    const el = threadRef.current;
+    if (el && typeof el.scrollTo === "function") {
+      el.scrollTo({ top: el.scrollHeight });
+    }
   }, [messages, typing]);
 
   async function saveEdit() {
