@@ -33,3 +33,33 @@ export interface Summary {
   points: string[];
   tags: string[];
 }
+
+export type ProviderName = "mock" | "claude" | "openai";
+
+export interface ProviderGroupView {
+  model?: string;
+  base_url?: string;
+  has_key: boolean;
+}
+
+export interface SettingsView {
+  provider: ProviderName;
+  claude: ProviderGroupView;
+  openai: ProviderGroupView;
+}
+
+export interface SettingsActive {
+  provider: ProviderName;
+  available: boolean;
+}
+
+export interface SettingsResponse {
+  settings: SettingsView;
+  active: SettingsActive;
+}
+
+export interface SettingsPatch {
+  provider?: ProviderName;
+  claude?: { model?: string; api_key?: string };
+  openai?: { base_url?: string; model?: string; api_key?: string };
+}

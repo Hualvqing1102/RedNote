@@ -880,3 +880,62 @@ textarea {
     padding: 16px;
   }
 }
+
+/* ---------- 设置页 ---------- */
+.settings-wrap { max-width: 720px; }
+.settings-wrap .panel-body { padding: 0; }
+.engine-badge {
+  font-size: 12px; color: var(--green-deep);
+  background: #e3efe7; border: 1px solid #c4dcca;
+  padding: 2px 10px; border-radius: 999px; font-weight: 600;
+}
+.engine-badge.cloud { color: #7a4a00; background: #fdf0d3; border-color: #ecd9a6; }
+.privacy-note {
+  margin: 14px 24px 0; padding: 10px 14px; font-size: 13px;
+  background: #eef2ea; border-left: 3px solid var(--green); color: var(--muted);
+  border-radius: 0 8px 8px 0;
+}
+.privacy-note.warn { background: #fdf3e2; border-left-color: #d99a2b; color: #7a5a1a; }
+.privacy-note .dim { opacity: 0.75; }
+.setting-block { padding: 18px 24px 4px; }
+.field-label {
+  font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 8px;
+}
+.radio-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.radio-card {
+  position: relative; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 12px 10px; cursor: pointer; background: var(--surface);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.radio-card.active { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+.radio-card .t { font-weight: 600; font-size: 14px; }
+.radio-card .d { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.radio-card input { position: absolute; opacity: 0; pointer-events: none; }
+.fields { display: flex; flex-direction: column; gap: 12px; padding-top: 16px; }
+.field { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 12px; }
+.field label { font-size: 13px; color: var(--muted); text-align: right; }
+.field input {
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  background: var(--surface); font-size: 14px; min-width: 0;
+}
+.field input:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: transparent; }
+.key-clear { white-space: nowrap; color: var(--green-deep); }
+.setting-actions { padding: 14px 24px 24px; display: flex; gap: 10px; align-items: center; }
+.success-banner {
+  margin: 14px 24px 0; padding: 10px 14px; font-size: 13px;
+  background: #e6f2e9; border: 1px solid #c4dcca; color: var(--green-deep);
+  border-radius: 8px;
+}
+
+/* ---------- 引擎提示(采集页/详情页) ---------- */
+.engine-note {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--muted); margin-top: 10px;
+}
+.engine-note .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+.engine-note.warn { color: #8a6216; }
+.engine-note.warn .dot { background: #d99a2b; }
+
+/* 追问面板内的引擎提示 */
+.ask-panel .engine-note { padding: 0 16px 8px; margin-top: 0; font-size: 12px; }

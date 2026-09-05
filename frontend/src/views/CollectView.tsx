@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderParagraphs } from "../lib/markdown";
 import { useAppStore } from "../store/useAppStore";
-import type { CollectResult, NoteInput, Summary } from "../types";
+import type { CollectResult, NoteInput, SettingsResponse, Summary } from "../types";
 
 const EXAMPLES = [
   "example.com/transformer",
@@ -12,7 +13,7 @@ const EXAMPLES = [
 
 const STEPS = [
   { label: "正在读取网页正文…", sub: "从页面中剔除广告与导航" },
-  { label: "Agent 正在提炼要点与摘要…", sub: "M1 使用本地规则生成" },
+  { label: "Agent 正在提炼要点与摘要…", sub: "按设置的 Provider 生成" },
   { label: "生成建议标签…", sub: "保存后仍可修改" },
 ];
 
@@ -31,6 +32,8 @@ export default function CollectView() {
   const [draft, setDraft] = useState<{ collect: CollectResult; summary: Summary } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [engine, setEngine] = useState<SettingsResponse | null>(null);
+  const [engineError, setEngineError] = useState(false);
 
   async function start() {
     const target = url.trim();
@@ -41,6 +44,12 @@ export default function CollectView() {
     setError("");
     setDraft(null);
     setPhase(1);
+    // 先取一次设置，用于明示当前总结由什么引擎处理(隐私提示)
+    try {
+      setEngine(await api.getSettings());
+    } catch {
+      setEngineError(true);
+    }
     try {
       const collect = await api.collectUrl(target);
       setPhase(2);
@@ -85,6 +94,14 @@ export default function CollectView() {
 
   const busy = phase >= 1 && phase <= 3;
 
+  const engineCloud = engine !== null && sendsToCloud(engine);
+  const engineText = engineError
+    ? "无法读取模型设置，将按默认本地规则处理"
+    : engine
+      ? describeEngine(engine)
+      : "";
+  const showEngine = Boolean(engine || engineError);
+
   return (
     <div className="collect-wrap">
       <div className="collect-hero">
@@ -118,6 +135,13 @@ export default function CollectView() {
       {error && (
         <div className="error-banner" role="alert">
           {error}
+        </div>
+      )}
+
+      {showEngine && (
+        <div className={`engine-note${engineCloud ? " warn" : ""}`}>
+          <span className="dot" />
+          {engineText}
         </div>
       )}
 

@@ -2,6 +2,8 @@ import type {
   CollectResult,
   Note,
   NoteInput,
+  SettingsPatch,
+  SettingsResponse,
   Summary,
 } from "../types";
 
@@ -65,4 +67,9 @@ export const api = {
     request(`/api/notes/${id}`, { method: "DELETE" }),
 
   listTags: (): Promise<string[]> => request("/api/tags"),
+
+  getSettings: (): Promise<SettingsResponse> => request("/api/settings"),
+
+  saveSettings: (patch: SettingsPatch): Promise<SettingsResponse> =>
+    request("/api/settings", { method: "PUT", body: JSON.stringify(patch) }),
 };

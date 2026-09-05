@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderBlocks } from "../lib/markdown";
 import { useAppStore } from "../store/useAppStore";
-import type { Note } from "../types";
+import type { Note, SettingsResponse } from "../types";
 
 interface Msg {
   role: "user" | "ai";
@@ -27,6 +28,8 @@ export default function NoteView() {
   const [question, setQuestion] = useState("");
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState("");
+  const [engine, setEngine] = useState<SettingsResponse | null>(null);
+  const [engineError, setEngineError] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,6 +48,10 @@ export default function NoteView() {
         ]);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
+    api
+      .getSettings()
+      .then(setEngine)
+      .catch(() => setEngineError(true));
   }, [noteId]);
 
   useEffect(() => {
@@ -96,6 +103,14 @@ export default function NoteView() {
   if (!note) {
     return <div className="hint">加载中…</div>;
   }
+
+  const engineCloud = engine !== null && sendsToCloud(engine);
+  const engineText = engineError
+    ? "引擎状态未知（默认本地规则）"
+    : engine
+      ? describeEngine(engine)
+      : "";
+  const showEngine = Boolean(engine || engineError);
 
   return (
     <div className="note-layout">
@@ -163,6 +178,12 @@ export default function NoteView() {
         <div className="head">
           <span className="lbl">就这篇笔记追问</span>
         </div>
+        {showEngine && (
+          <div className={`engine-note${engineCloud ? " warn" : ""}`}>
+            <span className="dot" />
+            {engineText}
+          </div>
+        )}
         <div className="thread" ref={threadRef}>
           {messages.map((m, i) => (
             <div className={`msg ${m.role}`} key={i}>
