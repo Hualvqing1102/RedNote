@@ -1,5 +1,6 @@
 import type {
   CollectResult,
+  CommentCard,
   Note,
   NoteInput,
   SettingsPatch,
@@ -31,6 +32,8 @@ export interface NoteFilter {
   tag?: string;
 }
 
+export type NotePatch = Partial<NoteInput> & { comments?: CommentCard[] };
+
 export const api = {
   collectUrl: (url: string): Promise<CollectResult> =>
     request("/api/collect", { method: "POST", body: JSON.stringify({ url }) }),
@@ -60,7 +63,7 @@ export const api = {
   createNote: (input: NoteInput): Promise<Note> =>
     request("/api/notes", { method: "POST", body: JSON.stringify(input) }),
 
-  updateNote: (id: number, patch: Partial<NoteInput>): Promise<Note> =>
+  updateNote: (id: number, patch: NotePatch): Promise<Note> =>
     request(`/api/notes/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
 
   deleteNote: (id: number): Promise<void> =>

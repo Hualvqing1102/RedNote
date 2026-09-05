@@ -1,9 +1,21 @@
+export interface CommentLink {
+  title: string;
+  url: string;
+}
+
+export interface CommentCard {
+  id: string;
+  text: string;
+  links: CommentLink[];
+}
+
 export interface Note {
   id: number;
   title: string;
   summary: string;
   content: string;
   points: string[];
+  comments?: CommentCard[];
   source_url: string;
   source_snapshot: string;
   created_at: number;

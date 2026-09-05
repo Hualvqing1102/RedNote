@@ -3,11 +3,18 @@ import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderBlocks } from "../lib/markdown";
 import { useAppStore } from "../store/useAppStore";
-import type { Note, SettingsResponse } from "../types";
+import type { CommentCard, Note, SettingsResponse } from "../types";
 
 interface Msg {
   role: "user" | "ai";
   text: string;
+}
+
+let commentSeq = 0;
+
+function newCardId(): string {
+  commentSeq += 1;
+  return `c${Date.now().toString(36)}${commentSeq}`;
 }
 
 function formatDate(epoch: number): string {
@@ -30,6 +37,11 @@ export default function NoteView() {
   const [error, setError] = useState("");
   const [engine, setEngine] = useState<SettingsResponse | null>(null);
   const [engineError, setEngineError] = useState(false);
+  // 注释卡片(独立面板，可增删/排序)
+  const [comments, setComments] = useState<CommentCard[]>([]);
+  const [commentsDirty, setCommentsDirty] = useState(false);
+  const [savingComments, setSavingComments] = useState(false);
+  const [commentsMsg, setCommentsMsg] = useState("");
   const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,6 +52,9 @@ export default function NoteView() {
         setNote(n);
         setDraftText(n.content);
         setEditing(false);
+        setComments(n.comments || []);
+        setCommentsDirty(false);
+        setCommentsMsg("");
         setMessages([
           {
             role: "ai",
@@ -100,6 +115,75 @@ export default function NoteView() {
       setMessages((m) => [...m, { role: "ai", text: e instanceof Error ? e.message : "请求失败" }]);
     } finally {
       setTyping(false);
+    }
+  }
+
+  // ------------------------------------------------ 注释卡片
+
+  function touchComments(next: CommentCard[]) {
+    setComments(next);
+    setCommentsDirty(true);
+    setCommentsMsg("");
+  }
+
+  function addComment() {
+    touchComments([...comments, { id: newCardId(), text: "", links: [] }]);
+  }
+
+  function removeComment(id: string) {
+    touchComments(comments.filter((c) => c.id !== id));
+  }
+
+  function moveComment(index: number, dir: -1 | 1) {
+    const target = index + dir;
+    if (target < 0 || target >= comments.length) return;
+    const next = [...comments];
+    [next[index], next[target]] = [next[target], next[index]];
+    touchComments(next);
+  }
+
+  function patchComment(id: string, patch: Partial<CommentCard>) {
+    touchComments(comments.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }
+
+  function addLink(id: string) {
+    touchComments(
+      comments.map((c) => (c.id === id ? { ...c, links: [...c.links, { title: "", url: "" }] } : c))
+    );
+  }
+
+  function patchLink(cardId: string, index: number, patch: Partial<{ title: string; url: string }>) {
+    touchComments(
+      comments.map((c) =>
+        c.id === cardId
+          ? { ...c, links: c.links.map((l, i) => (i === index ? { ...l, ...patch } : l)) }
+          : c
+      )
+    );
+  }
+
+  function removeLink(cardId: string, index: number) {
+    touchComments(
+      comments.map((c) =>
+        c.id === cardId ? { ...c, links: c.links.filter((_, i) => i !== index) } : c
+      )
+    );
+  }
+
+  async function saveComments() {
+    if (!note) return;
+    setSavingComments(true);
+    setCommentsMsg("");
+    try {
+      const updated = await api.updateNote(note.id, { comments });
+      setNote(updated);
+      setComments(updated.comments || []);
+      setCommentsDirty(false);
+      setCommentsMsg("注释已保存");
+    } catch (e) {
+      setCommentsMsg(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSavingComments(false);
     }
   }
 
@@ -199,6 +283,110 @@ export default function NoteView() {
             删除
           </button>
         </div>
+
+        <section className="note-comments" aria-label="我的注释与相关链接">
+          <h4>我的注释与相关链接</h4>
+          <p className="hint">把阅读时的想法记下来，或补充相关延伸阅读链接；卡片可增删、可上下排序。</p>
+
+          {commentsMsg && (
+            <div className={`comments-msg${commentsMsg.includes("已保存") ? "" : " error"}`} role="status">
+              {commentsMsg}
+            </div>
+          )}
+
+          {comments.length === 0 ? (
+            <div className="comments-empty">
+              还没有注释。点击「＋ 添加注释卡片」在你想记录的位置插入一张卡片。
+            </div>
+          ) : (
+            <div className="comment-list">
+              {comments.map((card, i) => (
+                <article className="comment-card" key={card.id}>
+                  <div className="cc-bar">
+                    <span className="cc-no">#{i + 1}</span>
+                    <div className="cc-tools">
+                      <button
+                        aria-label={`上移注释${i + 1}`}
+                        disabled={i === 0}
+                        onClick={() => moveComment(i, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        aria-label={`下移注释${i + 1}`}
+                        disabled={i === comments.length - 1}
+                        onClick={() => moveComment(i, 1)}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        className="danger"
+                        aria-label={`删除注释${i + 1}`}
+                        onClick={() => removeComment(card.id)}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={card.text}
+                    placeholder="写下你的注释/想法…"
+                    aria-label={`注释${i + 1}正文`}
+                    onChange={(e) => patchComment(card.id, { text: e.target.value })}
+                  />
+
+                  {card.links.map((link, j) => (
+                    <div className="cc-link" key={j}>
+                      <input
+                        type="text"
+                        value={link.title}
+                        placeholder="链接标题"
+                        aria-label={`注释${i + 1}链接${j + 1}标题`}
+                        onChange={(e) => patchLink(card.id, j, { title: e.target.value })}
+                      />
+                      <input
+                        type="url"
+                        value={link.url}
+                        placeholder="https://…"
+                        aria-label={`注释${i + 1}链接${j + 1}地址`}
+                        onChange={(e) => patchLink(card.id, j, { url: e.target.value })}
+                      />
+                      <button
+                        className="link-remove"
+                        aria-label={`删除注释${i + 1}的链接${j + 1}`}
+                        onClick={() => removeLink(card.id, j)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="cc-card-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => addLink(card.id)}>
+                      ＋ 添加相关链接
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <div className="comment-actions">
+            <button className="btn btn-ghost btn-sm" onClick={addComment}>
+              ＋ 添加注释卡片
+            </button>
+            {commentsDirty && (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={saveComments}
+                disabled={savingComments}
+              >
+                {savingComments ? "保存中…" : "保存注释"}
+              </button>
+            )}
+          </div>
+        </section>
       </div>
 
       <aside className="ask-panel">
