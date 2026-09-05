@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --paper: #f3f3ed;
   --surface: #fbfbf6;
   --ink: #20261f;
@@ -1336,3 +1336,94 @@ a.btn { text-decoration: none; }
 .data-actions { flex-wrap: wrap; }
 .cc-card-actions { flex-wrap: wrap; }
 .topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- 阅读体验：字号缩放 ---------- */
+.annotated-article { --reader-scale: 1; }
+.annotated-article .body { font-size: calc(15px * var(--reader-scale)); }
+.annotated-article .body p { margin: 0 0 1.2em; line-height: 1.9; }
+.annotated-article .body h3 { font-size: 1.62em; margin: 2.1em 0 0.8em; line-height: 1.35; }
+.annotated-article .body h4 { font-size: 1.3em; margin: 1.8em 0 0.65em; line-height: 1.4; }
+.annotated-article .body h5 { font-size: 1.06em; margin: 1.4em 0 0.5em; }
+.annotated-article .body h6 { font-size: 0.96em; margin: 1.1em 0 0.5em; }
+.annotated-article .body ul,
+.annotated-article .body ol { margin: 0 0 1.2em 1.7em; }
+
+/* ---------- 阅读工具条 ---------- */
+.reader-tools {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 0 12px; padding: 6px 8px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: var(--shadow);
+  position: sticky; top: 0; z-index: 5;
+}
+.reader-tools > button {
+  font-size: 13px; color: var(--muted);
+  padding: 4px 10px; border-radius: 7px;
+  border: 1px solid transparent;
+}
+.reader-tools > button:hover { color: var(--ink); background: rgba(32, 38, 31, 0.05); }
+.reader-tools > button.active {
+  color: var(--green-deep); background: rgba(46, 107, 76, 0.1);
+  border-color: rgba(46, 107, 76, 0.25);
+}
+.reader-tools .theme-btn { font-size: 14px; }
+.reader-tools .reader-tools-spacer { flex: 1; }
+.reader-scale-tip {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  min-width: 38px; text-align: center;
+}
+
+/* ---------- 文章目录大纲 ---------- */
+.reader-outline {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); padding: 6px; margin: 0 0 14px;
+}
+.reader-outline button {
+  text-align: left; font-size: 13px; color: var(--muted);
+  padding: 4px 8px; border-radius: 6px; line-height: 1.5;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.reader-outline button:hover { color: var(--ink); background: rgba(46, 107, 76, 0.08); }
+.reader-outline button.lv1 { font-weight: 700; color: var(--ink); font-size: 13.5px; }
+.reader-outline button.lv2 { font-weight: 600; color: var(--ink); }
+.reader-outline button.lv2 { padding-left: 24px; }
+.reader-outline button.lv3 { padding-left: 38px; }
+.reader-outline button.lv4 { padding-left: 52px; }
+.reader-outline button.lv5,
+.reader-outline button.lv6 { padding-left: 66px; }
+.reader-outline-empty {
+  font-size: 12.5px; color: var(--muted); padding: 8px 10px;
+}
+
+/* ---------- 深色阅读 ---------- */
+.annotated-article.reader-dark {
+  --ink: #edf2e3; --muted: #a7b09d; --line: #3b4234;
+  --surface: #20251c; --green: #9dd3a7; --green-deep: #bfe4c5;
+  color: var(--ink);
+}
+.annotated-article.reader-dark .body { color: var(--ink); }
+.annotated-article.reader-dark .body h3,
+.annotated-article.reader-dark .body h4,
+.annotated-article.reader-dark .body h5 { color: var(--ink); }
+.annotated-article.reader-dark .body h6 { color: var(--green-deep); }
+.annotated-article.reader-dark a { color: var(--green-deep); }
+.annotated-article.reader-dark .body code {
+  background: rgba(255, 255, 255, 0.1); color: #f4e2bd;
+}
+.annotated-article.reader-dark .md-table-wrap th,
+.annotated-article.reader-dark .md-table-wrap td { border-color: var(--line); }
+.annotated-article.reader-dark .md-table-wrap thead th { background: rgba(255, 255, 255, 0.07); }
+.annotated-article.reader-dark .md-table-wrap tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.03); }
+.annotated-article.reader-dark .md-pre {
+  background: #151810; border: 1px solid #2c3226;
+}
+.annotated-article.reader-dark blockquote { border-left-color: var(--line); color: var(--muted); }
+.annotated-article.reader-dark .inline-comment,
+.annotated-article.reader-dark .annotate-view { background: var(--surface); border-color: var(--line); }
+.annotated-article.reader-dark .save-state { background: #2b3a2c; color: var(--green-deep); }
+.annotated-article.reader-dark .reader-tools,
+.annotated-article.reader-dark .reader-outline { background: var(--surface); border-color: var(--line); }
+.annotated-article.reader-dark input,
+.annotated-article.reader-dark textarea { color: var(--ink); }

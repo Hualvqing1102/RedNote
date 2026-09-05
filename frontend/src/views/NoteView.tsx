@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
@@ -62,6 +63,23 @@ export default function NoteView() {
   const [menu, setMenu] = useState<CtxMenu | null>(null);
   const [focusCardId, setFocusCardId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+  // 阅读体验：字号倍率 / 深色阅读 / 目录大纲
+  const [readerScale, setReaderScale] = useState<number>(() => {
+    try {
+      const v = parseFloat(localStorage.getItem("rednoteReaderScale") ?? "");
+      return Number.isFinite(v) && v >= 0.7 && v <= 1.6 ? v : 1;
+    } catch {
+      return 1;
+    }
+  });
+  const [readerDark, setReaderDark] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("rednoteReaderDark") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [outlineOpen, setOutlineOpen] = useState(false);
   // 处于“编辑中”的注释卡（未确认前显示输入框；确认后显示为摘要卡片样式）
   const [editIds, setEditIds] = useState<Set<string>>(new Set());
   // 正在询问“是否删除”的注释卡（点击删除后先确认，不直接删）
@@ -105,6 +123,16 @@ export default function NoteView() {
       el.scrollTo({ top: el.scrollHeight });
     }
   }, [messages, typing]);
+
+  // 阅读偏好持久化
+  useEffect(() => {
+    try {
+      localStorage.setItem("rednoteReaderScale", String(readerScale));
+      localStorage.setItem("rednoteReaderDark", readerDark ? "1" : "0");
+    } catch {
+      // 忽略存储异常
+    }
+  }, [readerScale, readerDark]);
 
   // 注释改动后防抖自动保存
   useEffect(() => {
@@ -380,6 +408,21 @@ export default function NoteView() {
   const cardOrder = new Map<string, number>();
   comments.forEach((c, i) => cardOrder.set(c.id, i + 1));
 
+  const outline = blocks
+    .map((b, i) => (b.kind === "heading" ? { index: i, level: b.level, text: b.text } : null))
+    .filter((x): x is { index: number; level: number; text: string } => x !== null);
+
+  function jumpToSection(blockIndex: number) {
+    const el = document.getElementById(`sec-${blockIndex}`);
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function adjustScale(delta: number) {
+    setReaderScale((s) => Math.min(1.6, Math.max(0.7, Math.round((s + delta) * 10) / 10)));
+  }
+
   const menuBlock = menu
     ? menu.blockIndex < blocks.length
       ? blocks[menu.blockIndex]
@@ -446,7 +489,57 @@ export default function NoteView() {
             aria-label="笔记正文编辑区"
           />
         ) : (
-          <div className="annotated-article">
+          <div
+            className={`annotated-article${readerDark ? " reader-dark" : ""}`}
+            style={{ "--reader-scale": readerScale } as CSSProperties}
+            data-testid="reader-article"
+          >
+            <div className="reader-tools" role="toolbar" aria-label="阅读工具">
+              <button
+                className={`btn btn-ghost btn-sm${outlineOpen ? " active" : ""}`}
+                aria-pressed={outlineOpen}
+                onClick={() => setOutlineOpen((o) => !o)}
+              >
+                目录{outline.length > 0 ? ` (${outline.length})` : ""}
+              </button>
+              <span className="reader-tools-spacer" />
+              <button aria-label="减小字号" onClick={() => adjustScale(-0.1)}>
+                A−
+              </button>
+              <span className="reader-scale-tip">{(readerScale * 100).toFixed(0)}%</span>
+              <button aria-label="增大字号" onClick={() => adjustScale(0.1)}>
+                A+
+              </button>
+              <button
+                className="theme-btn"
+                aria-label={readerDark ? "切换到浅色阅读" : "切换到深色阅读"}
+                title={readerDark ? "浅色阅读" : "深色阅读"}
+                onClick={() => setReaderDark((d) => !d)}
+              >
+                {readerDark ? "☀️" : "🌙"}
+              </button>
+            </div>
+
+            {outlineOpen && (
+              <nav className="reader-outline" aria-label="文章目录">
+                {outline.length === 0 ? (
+                  <div className="reader-outline-empty">
+                    本文没有识别到标题层级(如 `# / ##`)。重新采集带标题的网页后可生成目录。
+                  </div>
+                ) : (
+                  outline.map((o) => (
+                    <button
+                      key={o.index}
+                      className={`lv${Math.min(o.level, 6)}`}
+                      onClick={() => jumpToSection(o.index)}
+                    >
+                      {o.text}
+                    </button>
+                  ))
+                )}
+              </nav>
+            )}
+
             <div className="annotate-bar">
               <span className="hint">
                 {comments.length === 0
@@ -483,6 +576,7 @@ export default function NoteView() {
                   <div
                     key={row.key}
                     data-row={row.key}
+                    id={`sec-${row.index}`}
                     className={`article-block${menu?.blockIndex === row.index ? " ctx-target" : ""}`}
                   >
                     {renderOneBlock(blocks[row.index], row.index)}
