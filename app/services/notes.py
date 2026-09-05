@@ -10,8 +10,12 @@ from typing import Any
 from app.db import connect
 
 # 允许在更新接口中修改的字段（notes 表内字段）
-PATCHABLE = {"title", "summary", "content", "points", "source_url", "source_snapshot"}
+PATCHABLE = {"title", "summary", "content", "points", "comments", "source_url", "source_snapshot"}
 TAG_KEY = "tags"
+
+MAX_TEXT = 20000  # 注释正文上限
+MAX_CARDS = 100  # 单篇注释卡片数上限
+MAX_LINKS = 20  # 每张卡片相关链接上限
 
 
 def _now() -> int:
@@ -24,12 +28,55 @@ def _points_to_json(points: Any) -> str:
     return "[]"
 
 
+def _comments_to_json(comments: Any) -> str:
+    """把客户端提交的注释卡片规整为可持久化的 JSON。
+
+    每张卡片：{id, text, links:[{title, url}]}；顺序即展示顺序（供排序）。
+    """
+    if not isinstance(comments, list):
+        return "[]"
+
+    def _clean_link(item: Any) -> dict[str, str] | None:
+        if not isinstance(item, dict):
+            return None
+        url = str(item.get("url") or "").strip()
+        if not url:
+            return None
+        title = str(item.get("title") or "").strip() or url
+        return {"title": title[:1000], "url": url[:1000]}
+
+    cards = []
+    for raw in comments[:MAX_CARDS]:
+        if not isinstance(raw, dict):
+            continue
+        text = str(raw.get("text") or "").strip()[:MAX_TEXT]
+        links: list[dict[str, str]] = []
+        for item in (raw.get("links") or [])[:MAX_LINKS]:
+            cleaned = _clean_link(item)
+            if cleaned:
+                links.append(cleaned)
+        if not text and not links:
+            continue
+        cards.append(
+            {
+                "id": str(raw.get("id") or f"c{_now()}")[:80],
+                "text": text,
+                "links": links,
+            }
+        )
+    return json.dumps(cards, ensure_ascii=False)
+
+
 def _row_to_note(row: sqlite3.Row, conn: sqlite3.Connection) -> dict[str, Any]:
     note = dict(row)
     try:
         note["points"] = json.loads(note.get("points") or "[]")
     except json.JSONDecodeError:
         note["points"] = []
+    try:
+        note["comments"] = json.loads(note.get("comments") or "[]")
+    except json.JSONDecodeError:
+        note["comments"] = []
     rows = conn.execute(
         """
         SELECT t.name FROM tags t
@@ -108,6 +155,8 @@ def update_note(db_path: str | Path, note_id: int, patch: dict[str, Any]) -> dic
             return None
         if "points" in fields:
             fields["points"] = _points_to_json(fields["points"])
+        if "comments" in fields:
+            fields["comments"] = _comments_to_json(fields["comments"])
         if fields:
             sets = ", ".join(f"{k} = ?" for k in fields)
             conn.execute(

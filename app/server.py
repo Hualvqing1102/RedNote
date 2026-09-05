@@ -51,6 +51,7 @@ class NotePatch(BaseModel):
     summary: str | None = None
     content: str | None = None
     points: list[str] | None = None
+    comments: list[dict[str, Any]] | None = None
     source_url: str | None = None
     source_snapshot: str | None = None
     tags: list[str] | None = None

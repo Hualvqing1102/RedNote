@@ -44,6 +44,19 @@ def note_to_markdown(note: dict[str, Any]) -> str:
     content = (note.get("content") or "").strip()
     if content:
         lines += ["", "## 正文", "", content]
+
+    comments = note.get("comments") or []
+    if comments:
+        lines += ["", "## 我的注释与相关链接", ""]
+        for comment in comments:
+            text = str(comment.get("text") or "").strip()
+            if text:
+                lines += [f"> {line}" for line in text.split("\n") if line.strip()]
+            for link in comment.get("links") or []:
+                title = str(link.get("title") or "").strip()
+                url = str(link.get("url") or "").strip()
+                if url:
+                    lines.append(f"- {title or url}: {url}")
     return "\n".join(lines).strip() + "\n"
 
 

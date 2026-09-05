@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS notes (
     summary         TEXT NOT NULL DEFAULT '',
     content         TEXT NOT NULL DEFAULT '',
     points          TEXT NOT NULL DEFAULT '[]',
+    comments        TEXT NOT NULL DEFAULT '[]',
     source_url      TEXT NOT NULL DEFAULT '',
     source_snapshot TEXT NOT NULL DEFAULT '',
     created_at      INTEGER NOT NULL,
@@ -29,6 +30,9 @@ CREATE TABLE IF NOT EXISTS note_tags (
 );
 """
 
+# 注释卡片 JSON 结构：
+# [{"id": "...", "text": "...", "links": [{"title": "...", "url": "..."}]}]
+
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
@@ -42,3 +46,7 @@ def init_db(db_path: str | Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with connect(path) as conn:
         conn.executescript(SCHEMA)
+        # 老库迁移：为已存在的 notes 表补充 comments 列（幂等）
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(notes)").fetchall()}
+        if "comments" not in cols:
+            conn.execute("ALTER TABLE notes ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'")
