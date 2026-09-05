@@ -10,7 +10,7 @@ from app.services.export import note_to_markdown, notes_to_markdown
 def _make(client) -> list[int]:
     """通过 API 建两条笔记，返回 id。"""
     ids = []
-    for title, tag in [("Transformer 笔记", "AI"), ("SQL 优化", "数据库")]:
+    for title in ["Transformer 笔记", "SQL 优化"]:
         r = client.post(
             "/api/notes",
             json={
@@ -19,7 +19,6 @@ def _make(client) -> list[int]:
                 "content": f"{title}的正文。\n\n第二段。",
                 "points": ["要点甲", "要点乙"],
                 "source_url": "https://example.com/x",
-                "tags": [tag],
             },
         )
         assert r.status_code == 201
@@ -28,6 +27,9 @@ def _make(client) -> list[int]:
 
 
 def test_note_to_markdown_structure(db_path):
+    from app.services import folders as folders_svc
+
+    folder = folders_svc.create_folder(db_path, "研究")
     note = svc.create_note(
         db_path,
         {
@@ -36,7 +38,7 @@ def test_note_to_markdown_structure(db_path):
             "content": "正文",
             "points": ["P1"],
             "source_url": "https://e.com",
-            "tags": ["a", "b"],
+            "folder_id": folder["id"],
         },
     )
     md = note_to_markdown(note)
@@ -45,7 +47,7 @@ def test_note_to_markdown_structure(db_path):
     assert "## 要点" in md and "- P1" in md
     assert "## 正文" in md
     assert "来源：https://e.com" in md
-    assert "标签：a、b" in md
+    assert "收藏夹：研究" in md
 
 
 def test_notes_to_markdown_separator(db_path):

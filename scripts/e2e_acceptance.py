@@ -31,28 +31,30 @@ with tempfile.TemporaryDirectory() as tmp:
         check("真实网页采集", r.status_code == 200, f"len={len(r.json()['content'])}")
         art = r.json()["content"]
 
-        # 3 总结(mock)
-        r = c.post("/api/agent/summarize", json={"title": art[:0] or "标题", "content": art[:12000]})
+        # 3 总结(mock，已无 tags)
+        r = c.post("/api/agent/summarize", json={"title": "标题", "content": art[:12000]})
         sm = r.json()
         check("Agent 总结", r.status_code == 200 and bool(sm.get("summary")), str(sm)[:80])
+        check("摘要不含 tags", "tags" not in sm)
 
-        # 4 建笔记(含 tags 与 points)
+        # 4 建笔记(含收藏夹)
+        folder = c.post("/api/folders", json={"name": "AI 阅读"}).json()
         note_body = {
             "title": "上下文工程(验收)",
             "summary": sm.get("summary", ""),
             "content": art,
             "points": sm.get("points", []),
-            "tags": ["AI", "Agent"],
+            "folder_id": folder["id"],
             "source_url": WECHAT,
         }
         r = c.post("/api/notes", json=note_body)
         check("创建笔记", r.status_code == 201, f"id={r.json()['id']}")
         note_id = r.json()["id"]
 
-        # 5 列表/搜索/标签筛选
+        # 5 列表/搜索/收藏夹筛选
         check("列表包含笔记", any(n["id"] == note_id for n in c.get("/api/notes").json()))
         check("关键词搜索", len(c.get("/api/notes", params={"q": "上下文工程"}).json()) == 1)
-        check("标签筛选", len(c.get("/api/notes", params={"tag": "AI"}).json()) == 1)
+        check("收藏夹筛选", len(c.get("/api/notes", params={"folder": folder["id"]}).json()) == 1)
 
         # 6 追问(mock)
         r = c.post("/api/agent/ask", json={"note_id": note_id, "question": "什么是上下文工程"})

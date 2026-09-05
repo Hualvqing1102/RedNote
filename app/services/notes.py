@@ -1,4 +1,4 @@
-"""笔记数据层：CRUD、标签、搜索（M1 用 LIKE，M3 升级 FTS5）。"""
+"""笔记数据层：CRUD、收藏夹归属、搜索（M1 用 LIKE，M3 升级 FTS5）。"""
 from __future__ import annotations
 
 import json
@@ -10,8 +10,10 @@ from typing import Any
 from app.db import connect
 
 # 允许在更新接口中修改的字段（notes 表内字段）
-PATCHABLE = {"title", "summary", "content", "points", "comments", "source_url", "source_snapshot"}
-TAG_KEY = "tags"
+PATCHABLE = {
+    "title", "summary", "content", "points", "comments",
+    "source_url", "source_snapshot", "folder_id",
+}
 
 MAX_TEXT = 20000  # 注释正文上限
 MAX_CARDS = 100  # 单篇注释卡片数上限
@@ -80,30 +82,16 @@ def _row_to_note(row: sqlite3.Row, conn: sqlite3.Connection) -> dict[str, Any]:
         note["comments"] = json.loads(note.get("comments") or "[]")
     except json.JSONDecodeError:
         note["comments"] = []
-    rows = conn.execute(
-        """
-        SELECT t.name FROM tags t
-        JOIN note_tags nt ON nt.tag_id = t.id
-        WHERE nt.note_id = ?
-        ORDER BY t.name
-        """,
-        (note["id"],),
-    ).fetchall()
-    note["tags"] = [r["name"] for r in rows]
+    # 附带收藏夹名称，便于展示
+    folder_id = note.get("folder_id")
+    note["folder_name"] = ""
+    if folder_id is not None:
+        folder = conn.execute("SELECT name FROM folders WHERE id = ?", (folder_id,)).fetchone()
+        if folder:
+            note["folder_name"] = folder["name"]
+        else:
+            note["folder_id"] = None
     return note
-
-
-def _attach_tags(conn: sqlite3.Connection, note_id: int, tags: list[str]) -> None:
-    conn.execute("DELETE FROM note_tags WHERE note_id = ?", (note_id,))
-    for raw in tags:
-        name = (raw or "").strip()
-        if not name:
-            continue
-        conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (name,))
-        tag_id = conn.execute("SELECT id FROM tags WHERE name = ?", (name,)).fetchone()["id"]
-        conn.execute(
-            "INSERT OR IGNORE INTO note_tags (note_id, tag_id) VALUES (?, ?)", (note_id, tag_id)
-        )
 
 
 def _fetch_note(conn: sqlite3.Connection, note_id: int) -> dict[str, Any] | None:
@@ -114,27 +102,30 @@ def _fetch_note(conn: sqlite3.Connection, note_id: int) -> dict[str, Any] | None
 def create_note(db_path: str | Path, data: dict[str, Any]) -> dict[str, Any]:
     path = Path(db_path)
     now = _now()
+    folder_id = data.get("folder_id")
+    if not isinstance(folder_id, int) or isinstance(folder_id, bool):
+        folder_id = None
     with connect(path) as conn:
         cur = conn.execute(
             """
-            INSERT INTO notes (title, summary, content, points, source_url, source_snapshot, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO notes (title, summary, content, points, comments, source_url,
+                               source_snapshot, folder_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 (data.get("title") or "").strip() or "无标题",
                 data.get("summary") or "",
                 data.get("content") or "",
                 _points_to_json(data.get("points", [])),
+                _comments_to_json(data.get("comments", [])),
                 data.get("source_url") or "",
                 data.get("source_snapshot") or "",
+                folder_id,
                 now,
                 now,
             ),
         )
-        note_id = cur.lastrowid
-        if data.get(TAG_KEY):
-            _attach_tags(conn, note_id, data[TAG_KEY])
-        return _fetch_note(conn, note_id)
+        return _fetch_note(conn, cur.lastrowid)
 
 
 def get_note(db_path: str | Path, note_id: int) -> dict[str, Any] | None:
@@ -148,66 +139,48 @@ def update_note(db_path: str | Path, note_id: int, patch: dict[str, Any]) -> dic
 
     path = Path(db_path)
     fields = {k: v for k, v in patch.items() if k in PATCHABLE}
-    new_tags = patch.get(TAG_KEY)
 
-    if not fields and new_tags is None:
+    if not fields:
         raise ValueError("没有需要更新的内容")
+
+    if "points" in fields:
+        fields["points"] = _points_to_json(fields["points"])
+    if "comments" in fields:
+        fields["comments"] = _comments_to_json(fields["comments"])
+    if "folder_id" in fields:
+        folder_id = fields["folder_id"]
+        if not isinstance(folder_id, int) or isinstance(folder_id, bool):
+            fields["folder_id"] = None
 
     with connect(path) as conn:
         if not conn.execute("SELECT 1 FROM notes WHERE id = ?", (note_id,)).fetchone():
             return None
-        if "points" in fields:
-            fields["points"] = _points_to_json(fields["points"])
-        if "comments" in fields:
-            fields["comments"] = _comments_to_json(fields["comments"])
-        if fields:
-            sets = ", ".join(f"{k} = ?" for k in fields)
-            conn.execute(
-                f"UPDATE notes SET {sets}, updated_at = ? WHERE id = ?",
-                (*fields.values(), _now(), note_id),
-            )
-        if new_tags is not None:
-            _attach_tags(conn, note_id, new_tags)
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        conn.execute(
+            f"UPDATE notes SET {sets}, updated_at = ? WHERE id = ?",
+            (*fields.values(), _now(), note_id),
+        )
         return _fetch_note(conn, note_id)
 
 
 def delete_note(db_path: str | Path, note_id: int) -> bool:
     with connect(db_path) as conn:
         cur = conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
-        deleted = cur.rowcount > 0
-        if deleted:
-            # 顺带清理已经没有笔记引用的孤立标签，避免筛选栏出现空标签
-            conn.execute(
-                """
-                DELETE FROM tags WHERE id NOT IN (
-                    SELECT DISTINCT tag_id FROM note_tags
-                )
-                """
-            )
-        return deleted
+        return cur.rowcount > 0
 
 
-def list_notes(db_path: str | Path, q: str = "", tag: str = "") -> list[dict[str, Any]]:
+def list_notes(db_path: str | Path, q: str = "", folder: int | None = None) -> list[dict[str, Any]]:
     sql = "SELECT * FROM notes WHERE 1=1"
     params: list[Any] = []
     if q:
         sql += " AND (title LIKE ? OR summary LIKE ? OR content LIKE ?)"
         like = f"%{q}%"
         params += [like, like, like]
-    if tag:
-        sql += (
-            " AND EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id"
-            " WHERE nt.note_id = notes.id AND t.name = ?)"
-        )
-        params.append(tag)
+    if folder is not None:
+        sql += " AND folder_id = ?"
+        params.append(folder)
     sql += " ORDER BY created_at DESC"
 
     with connect(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
         return [_row_to_note(r, conn) for r in rows]
-
-
-def list_tags(db_path: str | Path) -> list[str]:
-    with connect(db_path) as conn:
-        rows = conn.execute("SELECT name FROM tags ORDER BY name").fetchall()
-        return [r["name"] for r in rows]

@@ -165,7 +165,7 @@ def test_mock_provider_never_fails():
 
     out = _run(agent.summarize("标题", "注意力机制是 Transformer 的核心。\n\n深度学习模型大量使用它。"))
     assert out["summary"]
-    assert "AI" in out["tags"]
+    assert "tags" not in out
 
     ans = _run(agent.ask({"title": "t", "content": "第一段。\n\n第二段。"}, "核心是什么"))
     assert "核心是什么" in ans

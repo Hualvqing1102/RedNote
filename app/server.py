@@ -15,6 +15,7 @@ from app.db import init_db
 from app.services import agent as agent_service
 from app.services import collect as collect_service
 from app.services import export as export_service
+from app.services import folders as folders_service
 from app.services import notes as notes_service
 from app.services.collect import CollectError
 
@@ -41,9 +42,10 @@ class NoteIn(BaseModel):
     summary: str = ""
     content: str = ""
     points: list[str] = []
+    comments: list[dict[str, Any]] = []
     source_url: str = ""
     source_snapshot: str = ""
-    tags: list[str] = []
+    folder_id: int | None = None
 
 
 class NotePatch(BaseModel):
@@ -54,7 +56,15 @@ class NotePatch(BaseModel):
     comments: list[dict[str, Any]] | None = None
     source_url: str | None = None
     source_snapshot: str | None = None
-    tags: list[str] | None = None
+    folder_id: int | None = None
+
+
+class FolderIn(BaseModel):
+    name: str
+
+
+class FolderPatch(BaseModel):
+    name: str
 
 
 class ProviderGroup(BaseModel):
@@ -159,9 +169,9 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
     @app.get("/api/notes")
     def list_notes(
         q: str = Query(default=""),
-        tag: str = Query(default=""),
+        folder: int | None = Query(default=None),
     ) -> list[dict[str, Any]]:
-        return notes_service.list_notes(_path(), q=q.strip(), tag=tag.strip())
+        return notes_service.list_notes(_path(), q=q.strip(), folder=folder)
 
     @app.get("/api/notes/{note_id}")
     def get_note(note_id: int) -> dict[str, Any]:
@@ -190,9 +200,33 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
         if not notes_service.delete_note(_path(), note_id):
             raise HTTPException(status_code=404, detail="笔记不存在")
 
-    @app.get("/api/tags")
-    def tags() -> list[str]:
-        return notes_service.list_tags(_path())
+    # ------------------------------------------------ 收藏夹
+
+    @app.get("/api/folders")
+    def list_folders() -> list[dict[str, Any]]:
+        return folders_service.list_folders(_path())
+
+    @app.post("/api/folders", status_code=201)
+    def create_folder(payload: FolderIn) -> dict[str, Any]:
+        try:
+            return folders_service.create_folder(_path(), payload.name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.patch("/api/folders/{folder_id}")
+    def rename_folder(folder_id: int, payload: FolderPatch) -> dict[str, Any]:
+        try:
+            folder = folders_service.rename_folder(_path(), folder_id, payload.name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not folder:
+            raise HTTPException(status_code=404, detail="收藏夹不存在")
+        return folder
+
+    @app.delete("/api/folders/{folder_id}", status_code=204)
+    def delete_folder(folder_id: int) -> None:
+        if not folders_service.delete_folder(_path(), folder_id):
+            raise HTTPException(status_code=404, detail="收藏夹不存在")
 
     # ------------------------------------------------ 导出 / 备份
 

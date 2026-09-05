@@ -1,10 +1,22 @@
-"""SQLite 连接与建表。"""
+"""SQLite 连接与建表。
+
+数据模型(MVP 现版)：
+- notes: 笔记主表(正文 Markdown + 摘要/要点/注释 JSON + 来源 + 时间戳 + 所属收藏夹)
+- folders: 用户自建收藏夹(替代标签)；删除收藏夹后其笔记 folder_id 置空
+标签体系(tags / note_tags)已随 v2 彻底移除。
+"""
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS folders (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS notes (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     title           TEXT NOT NULL,
@@ -14,19 +26,9 @@ CREATE TABLE IF NOT EXISTS notes (
     comments        TEXT NOT NULL DEFAULT '[]',
     source_url      TEXT NOT NULL DEFAULT '',
     source_snapshot TEXT NOT NULL DEFAULT '',
+    folder_id       INTEGER REFERENCES folders(id) ON DELETE SET NULL,
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS tags (
-    id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
-);
-
-CREATE TABLE IF NOT EXISTS note_tags (
-    note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-    tag_id  INTEGER NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,
-    PRIMARY KEY (note_id, tag_id)
 );
 """
 
@@ -46,9 +48,19 @@ def init_db(db_path: str | Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with connect(path) as conn:
         conn.executescript(SCHEMA)
-        # 老库迁移：为已存在的 notes 表补充 comments 列（幂等）
+        # ---- 老库迁移(全部幂等) ----
+        # 1) notes 补 comments 列
         cols = {row[1] for row in conn.execute("PRAGMA table_info(notes)").fetchall()}
         if "comments" not in cols:
             conn.execute("ALTER TABLE notes ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'")
-        # 移除早期测试版“图片抓取”遗留的 media 表（该功能已下架，待下一阶段重做）
+        # 2) notes 补 folder_id 列并外链 folders
+        if "folder_id" not in cols:
+            conn.execute(
+                "ALTER TABLE notes ADD COLUMN folder_id INTEGER "
+                "REFERENCES folders(id) ON DELETE SET NULL"
+            )
+        # 3) 彻底移除标签体系(含历史数据)
+        conn.execute("DROP TABLE IF EXISTS note_tags")
+        conn.execute("DROP TABLE IF EXISTS tags")
+        # 移除早期测试版“图片抓取”遗留的 media 表（功能已下架）
         conn.execute("DROP TABLE IF EXISTS media")

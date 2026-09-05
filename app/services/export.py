@@ -17,17 +17,17 @@ def _fmt_date(epoch: int) -> str:
 
 
 def note_to_markdown(note: dict[str, Any]) -> str:
-    """把一条笔记渲染成 Markdown 文本（含摘要/要点/标签/来源元信息）。"""
+    """把一条笔记渲染成 Markdown 文本（含摘要/要点/收藏夹/来源元信息）。"""
     lines: list[str] = []
     lines.append(f"# {note.get('title') or '无标题'}")
     meta: list[str] = []
     if note.get("source_url"):
         meta.append(f"来源：{note['source_url']}")
+    if note.get("folder_name"):
+        meta.append(f"收藏夹：{note['folder_name']}")
     meta.append(f"创建于 {_fmt_date(note.get('created_at') or time.time())}")
     if note.get("updated_at"):
         meta.append(f"更新于 {_fmt_date(note['updated_at'])}")
-    if note.get("tags"):
-        meta.append("标签：" + "、".join(note["tags"]))
     if meta:
         lines.append("")
         lines.append("> " + " · ".join(meta))

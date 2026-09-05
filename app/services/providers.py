@@ -50,7 +50,7 @@ class MockProvider:
 def _mock_summary(content: str) -> dict[str, Any]:
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", content) if p.strip()]
     if not paragraphs:
-        return {"summary": "", "points": [], "tags": []}
+        return {"summary": "", "points": []}
 
     summary = paragraphs[0].replace("\n", " ")
     if len(summary) > 160:
@@ -63,19 +63,7 @@ def _mock_summary(content: str) -> dict[str, Any]:
             one = one[:70].rstrip() + "…"
         points.append(one)
 
-    tags: list[str] = []
-    hay = content.lower()
-    if any(k in hay for k in ["deep", "learning", "neural", "transformer", "attention", "model", "深度学习", "机器学习", "神经网络", "大模型", "人工智能"]):
-        tags.append("AI")
-    if any(k in hay for k in ["python", "java", "c++", "代码", "程序", "编程"]):
-        tags.append("编程")
-    if any(k in hay for k in ["sql", "database", "数据库", "index", "索引"]):
-        tags.append("数据库")
-    if any(k in hay for k in ["学习", "方法", "笔记", "记忆", "方法论"]):
-        tags.append("学习方法")
-    if not tags:
-        tags.append("网页摘录")
-    return {"summary": summary, "points": points[:5], "tags": tags[:4]}
+    return {"summary": summary, "points": points[:5]}
 
 
 # ---------------------------------------------------------------- 真实 Provider 基类

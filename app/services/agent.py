@@ -16,9 +16,9 @@ from app.services.providers import LLMProvider, MockProvider, ProviderError
 
 SYSTEM_SUMMARIZE = (
     "你是一个学习笔记助手。根据用户提供的文章标题与正文，"
-    "提炼一段中文摘要（150 字以内）、3-5 个要点、3-6 个简短标签。"
+    "提炼一段中文摘要（150 字以内）和 3-5 个要点。"
     "必须只输出 JSON，不要输出任何其他文字，格式："
-    '{"summary": "...", "points": ["..."], "tags": ["..."]}'
+    '{"summary": "...", "points": ["..."]}'
 )
 
 SYSTEM_ASK = (
@@ -50,14 +50,12 @@ async def summarize(
             raise ValueError("模型输出不是对象")
         summary = str(data.get("summary") or "").strip()
         points = [str(p).strip() for p in (data.get("points") or []) if str(p).strip()]
-        tags = [str(t).strip() for t in (data.get("tags") or []) if str(t).strip()]
         if not summary and not points:
             raise ValueError("模型输出为空")
         return {
             "title": title or "未命名",
             "summary": summary[:500],
             "points": points[:5],
-            "tags": tags[:8],
         }
     except ProviderError as exc:
         # 统一转换为 AgentError，让 API 层只需捕获这一种领域异常
