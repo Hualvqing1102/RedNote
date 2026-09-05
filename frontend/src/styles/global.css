@@ -1498,3 +1498,12 @@ a.btn { text-decoration: none; }
   padding: 4px 8px; font-size: 13px; background: var(--surface); color: var(--ink);
   max-width: 260px;
 }
+
+/* ---------- 笔记卡片：收藏夹下拉 ---------- */
+.note-folder { margin: 6px 0 2px; }
+.note-folder select {
+  width: 100%; font-size: 12px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 3px 8px; background: var(--surface); cursor: pointer;
+}
+.note-folder select:hover { border-color: var(--muted); color: var(--ink); }

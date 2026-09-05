@@ -12,6 +12,7 @@ vi.mock("../api/client", () => ({
     createFolder: vi.fn(),
     renameFolder: vi.fn(),
     deleteFolder: vi.fn(),
+    updateNote: vi.fn(),
   },
 }));
 
@@ -39,14 +40,15 @@ describe("LibraryView", () => {
     vi.mocked(api.listNotes).mockReset().mockResolvedValue([NOTE]);
     vi.mocked(api.listFolders).mockReset().mockResolvedValue(FOLDERS);
     vi.mocked(api.deleteNote).mockReset().mockResolvedValue(undefined);
+    vi.mocked(api.updateNote).mockReset();
     vi.mocked(api.createFolder).mockReset().mockResolvedValue({ id: 12, name: "新夹", note_count: 0 });
   });
 
   it("渲染收藏夹筛选与导出入口", async () => {
     render(<LibraryView />);
     expect(await screen.findByText("Transformer 笔记")).toBeInTheDocument();
-    expect(screen.getByText("AI")).toBeInTheDocument();
-    expect(screen.getByText("工程")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /AI/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /工程/ })).toBeInTheDocument();
     const exportLink = screen.getByRole("link", { name: /导出全部 Markdown/ });
     expect(exportLink.getAttribute("href")).toBe("/api/export/notes.md");
   });
@@ -54,7 +56,7 @@ describe("LibraryView", () => {
   it("点击收藏夹后按 folder 过滤", async () => {
     render(<LibraryView />);
     await screen.findByText("Transformer 笔记");
-    fireEvent.click(screen.getByText("工程"));
+    fireEvent.click(screen.getByRole("button", { name: /工程/ }));
     await waitFor(() => {
       expect(api.listNotes).toHaveBeenCalledWith({ q: undefined, folder: 11 });
     });
@@ -67,6 +69,19 @@ describe("LibraryView", () => {
     fireEvent.change(screen.getByLabelText("新收藏夹名称"), { target: { value: "新夹" } });
     fireEvent.click(screen.getByRole("button", { name: "确定" }));
     await waitFor(() => expect(api.createFolder).toHaveBeenCalledWith("新夹"));
+  });
+
+  it("卡片下拉可直接把已有笔记移入收藏夹", async () => {
+    vi.mocked(api.updateNote).mockReset().mockResolvedValue({ ...NOTE, folder_id: 11, folder_name: "工程" });
+    render(<LibraryView />);
+    await screen.findByText("Transformer 笔记");
+
+    fireEvent.change(screen.getByLabelText("设置笔记「Transformer 笔记」的收藏夹"), {
+      target: { value: "11" },
+    });
+    await waitFor(() => expect(api.updateNote).toHaveBeenCalledWith(1, { folder_id: 11 }));
+    // 计数刷新(再次拉取收藏夹)
+    expect(api.listFolders).toHaveBeenCalled();
   });
 
   it("管理模式下可删除收藏夹", async () => {

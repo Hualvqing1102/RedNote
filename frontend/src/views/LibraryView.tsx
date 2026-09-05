@@ -61,6 +61,23 @@ export default function LibraryView() {
     }
   }
 
+  async function moveNote(id: number, value: string) {
+    const folder_id = value === "" ? null : Number(value);
+    try {
+      const updated = await api.updateNote(id, { folder_id });
+      // 当前正按某收藏夹浏览时，把移出的笔记从列表移除
+      setNotes((list) =>
+        folderId !== null && updated.folder_id !== folderId
+          ? list.filter((n) => n.id !== id)
+          : list.map((n) => (n.id === id ? updated : n))
+      );
+      setError("");
+      refreshFolders();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "移动失败");
+    }
+  }
+
   async function submitCreate() {
     const name = newName.trim();
     if (!name) return;
@@ -220,6 +237,20 @@ export default function LibraryView() {
               <div className="kind">笔记 · {formatDate(note.created_at)}</div>
               <h3>{note.title}</h3>
               <div className="snippet">{note.summary || note.content.slice(0, 120)}</div>
+              <div className="note-folder" onClick={(e) => e.stopPropagation()}>
+                <select
+                  aria-label={`设置笔记「${note.title}」的收藏夹`}
+                  value={note.folder_id === null ? "" : String(note.folder_id)}
+                  onChange={(e) => moveNote(note.id, e.target.value)}
+                >
+                  <option value="">未分类</option>
+                  {folders.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="meta">
                 <span className="src">{note.source_url || "无来源"}</span>
                 <span>{note.points.length} 要点</span>
