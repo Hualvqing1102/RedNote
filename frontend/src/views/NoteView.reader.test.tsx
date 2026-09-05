@@ -61,12 +61,13 @@ describe("NoteView 阅读工具", () => {
     expect(container.style.getPropertyValue("--reader-scale")).toBe("1");
   });
 
-  it("有标题时目录默认出现在正文左侧", async () => {
+  it("有标题时目录以独立左栏出现", async () => {
     render(<NoteView />);
-    const container = (await screen.findByTestId("reader-article")) as HTMLElement;
-    expect(container.className).toContain("has-outline");
+    const reader = (await screen.findByTestId("reader-article")) as HTMLElement;
+    const layout = reader.closest(".note-layout") as HTMLElement | null;
+    expect(layout?.classList.contains("has-outline")).toBe(true);
 
-    const nav = screen.getByRole("navigation", { name: "文章目录" });
+    const nav = screen.getByRole("complementary", { name: "文章目录" });
     expect(within(nav).getByText("第一章 概述")).toBeInTheDocument();
     expect(within(nav).getByText("1.1 小节")).toBeInTheDocument();
     expect(within(nav).getByText("1.2 小节")).toBeInTheDocument();
@@ -81,8 +82,7 @@ describe("NoteView 阅读工具", () => {
       content: "只有普通正文，没有任何标题。",
     });
     render(<NoteView />);
-    const container = (await screen.findByTestId("reader-article")) as HTMLElement;
-    expect(container.className).not.toContain("has-outline");
-    expect(screen.queryByRole("navigation", { name: "文章目录" })).not.toBeInTheDocument();
+    await screen.findByTestId("reader-article");
+    expect(screen.queryByRole("complementary", { name: "文章目录" })).not.toBeInTheDocument();
   });
 });

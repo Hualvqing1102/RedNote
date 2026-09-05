@@ -421,7 +421,21 @@ export default function NoteView() {
     : null;
 
   return (
-    <div className="note-layout">
+    <div className={`note-layout${outline.length > 0 ? " has-outline" : ""}`}>
+      {outline.length > 0 && (
+        <aside className="reader-rail" aria-label="文章目录">
+          <div className="reader-rail-title">目录</div>
+          {outline.map((o) => (
+            <button
+              key={o.index}
+              className={`lv${Math.min(o.level, 6)}`}
+              onClick={() => jumpToSection(o.index)}
+            >
+              {o.text}
+            </button>
+          ))}
+        </aside>
+      )}
       <div className="note-doc">
         <div className="note-actions-top">
           <button className="btn btn-ghost btn-sm" onClick={() => setView("library")}>
@@ -480,11 +494,7 @@ export default function NoteView() {
             aria-label="笔记正文编辑区"
           />
         ) : (
-          <div
-            className={`annotated-article${outline.length > 0 ? " has-outline" : ""}`}
-            style={{ "--reader-scale": readerScale } as CSSProperties}
-            data-testid="reader-article"
-          >
+          <div className="annotated-article" style={{ "--reader-scale": readerScale } as CSSProperties} data-testid="reader-article">
             <div className="reader-tools" role="toolbar" aria-label="阅读工具">
               <span className="reader-scale-tip">字号 {(readerScale * 100).toFixed(0)}%</span>
               <button aria-label="减小字号" onClick={() => adjustScale(-0.1)}>
@@ -494,23 +504,8 @@ export default function NoteView() {
                 A+
               </button>
               <span className="reader-tools-spacer" />
-              {outline.length > 0 && <span className="reader-tools-count">目录 {outline.length} 节</span>}
+              {outline.length > 0 && <span className="reader-tools-count">目录在左侧 {outline.length} 节</span>}
             </div>
-
-            {outline.length > 0 && (
-              <nav className="reader-rail" aria-label="文章目录">
-                <div className="reader-rail-title">目录</div>
-                {outline.map((o) => (
-                  <button
-                    key={o.index}
-                    className={`lv${Math.min(o.level, 6)}`}
-                    onClick={() => jumpToSection(o.index)}
-                  >
-                    {o.text}
-                  </button>
-                ))}
-              </nav>
-            )}
 
             <div className="annotate-bar">
               <span className="hint">
