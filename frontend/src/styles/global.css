@@ -1240,3 +1240,67 @@ a.btn { text-decoration: none; }
   background: transparent; color: inherit; padding: 0; font-size: inherit;
   display: block; white-space: pre;
 }
+
+/* ---------- 正文排版：标题层级清晰化 + 段落节奏 ---------- */
+.note-doc .body,
+.article {
+  font-size: 15px;
+}
+.note-doc .body p,
+.article p {
+  margin: 0 0 18px;
+  line-height: 1.9;
+}
+/* 大标题(# 一级) */
+.note-doc .body h3,
+.article h3 {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 34px 0 12px;
+  color: var(--ink);
+}
+/* 二级标题(##) */
+.note-doc .body h4,
+.article h4 {
+  font-family: var(--serif);
+  font-size: 19.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 28px 0 10px;
+  color: var(--ink);
+}
+/* 三级标题(###) */
+.note-doc .body h5,
+.article h5 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 22px 0 8px;
+  color: var(--ink);
+}
+/* 四级及以下(#### ~ ######) */
+.note-doc .body h6,
+.article h6 {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: var(--green-deep);
+}
+.note-doc .body h3:first-child,
+.note-doc .body h4:first-child,
+.article h3:first-child,
+.article h4:first-child {
+  margin-top: 0;
+}
+.note-doc .body ul,
+.article ul,
+.note-doc .body ol,
+.article ol {
+  margin: 0 0 18px 26px;
+}
+.note-doc .body li,
+.article li {
+  margin-bottom: 6px;
+  line-height: 1.8;
+}
