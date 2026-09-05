@@ -29,14 +29,42 @@ describe("renderBlocks", () => {
     expect(dom.querySelectorAll("p")).toHaveLength(2);
   });
 
-  it("支持加粗/斜体/行内代码并把链接仅保留文字", () => {
+  it("支持加粗/斜体/行内代码，并把链接渲染为可点击链接", () => {
     const dom = renderBlocksToDom("包含 **加粗** 与 *斜体* 与 `代码` 和 [链接文字](https://example.com/a)");
     expect(dom.querySelector("strong")?.textContent).toBe("加粗");
     expect(dom.querySelector("em")?.textContent).toBe("斜体");
     expect(dom.querySelector("code")?.textContent).toBe("代码");
-    const p = dom.querySelector("p");
-    expect(p?.textContent).toContain("链接文字");
-    expect(p?.textContent).not.toContain("https://example.com/a");
+    const link = dom.querySelector("a");
+    expect(link?.textContent).toBe("链接文字");
+    expect(link?.getAttribute("href")).toBe("https://example.com/a");
+  });
+
+  it("渲染行内/独立图片(含本地 /media 路径)", () => {
+    const dom = renderBlocksToDom("图前文字 ![示意图](/media/abc123) 图后文字\n\n![独立图](/media/def456)");
+    const imgs = dom.querySelectorAll("img");
+    expect(imgs.length).toBe(2);
+    expect(imgs[0].getAttribute("src")).toBe("/media/abc123");
+    expect(imgs[0].getAttribute("alt")).toBe("示意图");
+    expect(imgs[1].getAttribute("src")).toBe("/media/def456");
+  });
+
+  it("渲染 GFM 表格", () => {
+    const dom = renderBlocksToDom("| 列1 | 列2 |\n|---|---|\n| 1a | 1b |\n| 2a | 2b |");
+    const table = dom.querySelector("table");
+    expect(table).not.toBeNull();
+    expect(table?.querySelectorAll("thead th").length).toBe(2);
+    expect(table?.querySelectorAll("tbody tr").length).toBe(2);
+    expect(table?.querySelector("tbody tr td")?.textContent).toBe("1a");
+  });
+
+  it("缩进嵌套列表渲染为嵌套结构", () => {
+    const dom = renderBlocksToDom("- 父项\n  - 子项一\n  - 子项二\n- 另一父项");
+    const outerItems = dom.querySelector("ul")?.children;
+    expect(outerItems?.length).toBe(2);
+    // 第一项“父项”内应有嵌套 ul
+    const firstLi = dom.querySelector("ul > li");
+    expect(firstLi?.querySelector("ul > li")?.textContent).toBe("子项一");
+    expect(dom.querySelectorAll("ul li").length).toBe(4);
   });
 
   it("渲染引用与分隔线", () => {

@@ -1211,3 +1211,20 @@ a.btn { text-decoration: none; }
 }
 .delete-confirm .confirm.no:hover { color: var(--ink); border-color: var(--muted); }
 .annotate-view-head { min-height: 26px; }
+
+/* ---------- 抓取图片 / GFM 表格渲染 ---------- */
+.md-img-inline {
+  display: block; max-width: 100%; max-height: 460px;
+  margin: 10px auto; border-radius: 8px;
+  box-shadow: var(--shadow); object-fit: contain;
+  background: #fafafa;
+}
+.md-table-wrap { overflow-x: auto; margin: 12px 0 16px; }
+.md-table-wrap table {
+  border-collapse: collapse; width: 100%; font-size: 13.5px;
+}
+.md-table-wrap th, .md-table-wrap td {
+  border: 1px solid var(--line); padding: 7px 10px; text-align: left;
+}
+.md-table-wrap thead th { background: #f1f4ee; font-weight: 600; }
+.md-table-wrap tbody tr:nth-child(even) { background: rgba(243, 243, 237, 0.6); }
