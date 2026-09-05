@@ -63,7 +63,7 @@ export default function NoteView() {
   const [menu, setMenu] = useState<CtxMenu | null>(null);
   const [focusCardId, setFocusCardId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  // 阅读体验：字号倍率 / 深色阅读 / 目录大纲
+  // 阅读体验：字号倍率(深色与目录开关已简化/移除)
   const [readerScale, setReaderScale] = useState<number>(() => {
     try {
       const v = parseFloat(localStorage.getItem("rednoteReaderScale") ?? "");
@@ -72,14 +72,6 @@ export default function NoteView() {
       return 1;
     }
   });
-  const [readerDark, setReaderDark] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("rednoteReaderDark") === "1";
-    } catch {
-      return false;
-    }
-  });
-  const [outlineOpen, setOutlineOpen] = useState(false);
   // 处于“编辑中”的注释卡（未确认前显示输入框；确认后显示为摘要卡片样式）
   const [editIds, setEditIds] = useState<Set<string>>(new Set());
   // 正在询问“是否删除”的注释卡（点击删除后先确认，不直接删）
@@ -128,11 +120,10 @@ export default function NoteView() {
   useEffect(() => {
     try {
       localStorage.setItem("rednoteReaderScale", String(readerScale));
-      localStorage.setItem("rednoteReaderDark", readerDark ? "1" : "0");
     } catch {
       // 忽略存储异常
     }
-  }, [readerScale, readerDark]);
+  }, [readerScale]);
 
   // 注释改动后防抖自动保存
   useEffect(() => {
@@ -490,53 +481,34 @@ export default function NoteView() {
           />
         ) : (
           <div
-            className={`annotated-article${readerDark ? " reader-dark" : ""}`}
+            className={`annotated-article${outline.length > 0 ? " has-outline" : ""}`}
             style={{ "--reader-scale": readerScale } as CSSProperties}
             data-testid="reader-article"
           >
             <div className="reader-tools" role="toolbar" aria-label="阅读工具">
-              <button
-                className={`btn btn-ghost btn-sm${outlineOpen ? " active" : ""}`}
-                aria-pressed={outlineOpen}
-                onClick={() => setOutlineOpen((o) => !o)}
-              >
-                目录{outline.length > 0 ? ` (${outline.length})` : ""}
-              </button>
-              <span className="reader-tools-spacer" />
+              <span className="reader-scale-tip">字号 {(readerScale * 100).toFixed(0)}%</span>
               <button aria-label="减小字号" onClick={() => adjustScale(-0.1)}>
                 A−
               </button>
-              <span className="reader-scale-tip">{(readerScale * 100).toFixed(0)}%</span>
               <button aria-label="增大字号" onClick={() => adjustScale(0.1)}>
                 A+
               </button>
-              <button
-                className="theme-btn"
-                aria-label={readerDark ? "切换到浅色阅读" : "切换到深色阅读"}
-                title={readerDark ? "浅色阅读" : "深色阅读"}
-                onClick={() => setReaderDark((d) => !d)}
-              >
-                {readerDark ? "☀️" : "🌙"}
-              </button>
+              <span className="reader-tools-spacer" />
+              {outline.length > 0 && <span className="reader-tools-count">目录 {outline.length} 节</span>}
             </div>
 
-            {outlineOpen && (
-              <nav className="reader-outline" aria-label="文章目录">
-                {outline.length === 0 ? (
-                  <div className="reader-outline-empty">
-                    本文没有识别到标题层级(如 `# / ##`)。重新采集带标题的网页后可生成目录。
-                  </div>
-                ) : (
-                  outline.map((o) => (
-                    <button
-                      key={o.index}
-                      className={`lv${Math.min(o.level, 6)}`}
-                      onClick={() => jumpToSection(o.index)}
-                    >
-                      {o.text}
-                    </button>
-                  ))
-                )}
+            {outline.length > 0 && (
+              <nav className="reader-rail" aria-label="文章目录">
+                <div className="reader-rail-title">目录</div>
+                {outline.map((o) => (
+                  <button
+                    key={o.index}
+                    className={`lv${Math.min(o.level, 6)}`}
+                    onClick={() => jumpToSection(o.index)}
+                  >
+                    {o.text}
+                  </button>
+                ))}
               </nav>
             )}
 

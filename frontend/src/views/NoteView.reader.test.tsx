@@ -61,21 +61,11 @@ describe("NoteView 阅读工具", () => {
     expect(container.style.getPropertyValue("--reader-scale")).toBe("1");
   });
 
-  it("可切换深/浅色阅读", async () => {
+  it("有标题时目录默认出现在正文左侧", async () => {
     render(<NoteView />);
     const container = (await screen.findByTestId("reader-article")) as HTMLElement;
+    expect(container.className).toContain("has-outline");
 
-    fireEvent.click(screen.getByRole("button", { name: "切换到深色阅读" }));
-    expect(container.className).toContain("reader-dark");
-    fireEvent.click(screen.getByRole("button", { name: "切换到浅色阅读" }));
-    expect(container.className).not.toContain("reader-dark");
-  });
-
-  it("目录列出各级标题并支持跳转(无标题时给提示)", async () => {
-    render(<NoteView />);
-    await screen.findByText("第一章 概述");
-
-    fireEvent.click(screen.getByRole("button", { name: /目录/ }));
     const nav = screen.getByRole("navigation", { name: "文章目录" });
     expect(within(nav).getByText("第一章 概述")).toBeInTheDocument();
     expect(within(nav).getByText("1.1 小节")).toBeInTheDocument();
@@ -83,5 +73,16 @@ describe("NoteView 阅读工具", () => {
 
     // 点击目录项应定位到对应标题(jsdom 无 scrollIntoView，只验证不抛错)
     expect(() => fireEvent.click(within(nav).getByText("1.1 小节"))).not.toThrow();
+  });
+
+  it("无标题笔记不显示目录栏", async () => {
+    vi.mocked(api.getNote).mockResolvedValue({
+      ...NOTE,
+      content: "只有普通正文，没有任何标题。",
+    });
+    render(<NoteView />);
+    const container = (await screen.findByTestId("reader-article")) as HTMLElement;
+    expect(container.className).not.toContain("has-outline");
+    expect(screen.queryByRole("navigation", { name: "文章目录" })).not.toBeInTheDocument();
   });
 });
