@@ -69,12 +69,12 @@ describe("NoteView 内联注释(编辑/确认)", () => {
     vi.mocked(api.deleteNote).mockReset();
   });
 
-  it("已确认注释以摘要卡片样式内联展示，可再编辑", async () => {
+  it("已确认注释只展示内容与链接(无标题)，可再编辑", async () => {
     render(<NoteView />);
-    expect(await screen.findByText("第 1 段批注")).toBeInTheDocument();
-    expect(screen.getByText("第 2 段批注")).toBeInTheDocument();
-    // 阅读样式：正文以段落展示，输入框默认隐藏
-    expect(screen.getByText("这里的比喻不错")).toBeInTheDocument();
+    expect(await screen.findByText("这里的比喻不错")).toBeInTheDocument();
+    // 不再显示“第 N 段批注”标题
+    expect(screen.queryByText("第 1 段批注")).not.toBeInTheDocument();
+    // 输入框默认隐藏
     expect(screen.queryByLabelText("注释1正文")).not.toBeInTheDocument();
     // 点击“编辑”回到输入态
     fireEvent.click(screen.getByRole("button", { name: "编辑注释1" }));
@@ -92,7 +92,6 @@ describe("NoteView 内联注释(编辑/确认)", () => {
     expect(screen.getByRole("button", { name: "在此段后插入注释" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "在此段后插入注释" }));
-    // 新卡片自动进入编辑态
     expect(screen.getByLabelText("注释3正文")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("注释3正文"), {
       target: { value: "新插入的批注内容" },
@@ -115,13 +114,12 @@ describe("NoteView 内联注释(编辑/确认)", () => {
 
   it("点“确认”保存后切回阅读样式", async () => {
     render(<NoteView />);
-    await screen.findByText("第 1 段批注");
+    await screen.findByText("这里的比喻不错");
 
     fireEvent.click(screen.getByRole("button", { name: "编辑注释1" }));
     fireEvent.change(screen.getByLabelText("注释1正文"), { target: { value: "已修改的批注" } });
     fireEvent.click(screen.getByRole("button", { name: "确认注释1" }));
 
-    // 立即持久化
     await waitFor(
       () => {
         expect(api.updateNote).toHaveBeenCalledWith(
@@ -135,14 +133,13 @@ describe("NoteView 内联注释(编辑/确认)", () => {
       },
       { timeout: 4000 }
     );
-    // 回到阅读样式：输入框消失，文本以段落展示
     expect(screen.queryByLabelText("注释1正文")).not.toBeInTheDocument();
     expect(screen.getByText("已修改的批注")).toBeInTheDocument();
   });
 
   it("可在编辑卡片中添加相关链接", async () => {
     render(<NoteView />);
-    await screen.findByText("第 2 段批注");
+    await screen.findByText("需要补充阅读");
 
     fireEvent.click(screen.getByRole("button", { name: "编辑注释2" }));
     fireEvent.click(screen.getAllByRole("button", { name: "＋ 添加相关链接" })[0]);
@@ -167,13 +164,18 @@ describe("NoteView 内联注释(编辑/确认)", () => {
     );
   });
 
-  it("删除已确认注释", async () => {
+  it("删除需两步确认：先点删除出现确认，点“确认删除”才真正删除", async () => {
     render(<NoteView />);
-    await screen.findByText("第 1 段批注");
+    await screen.findByText("这里的比喻不错");
 
+    // 第一次点击删除：不直接删，弹出确认
     fireEvent.click(screen.getByRole("button", { name: "删除注释1" }));
+    expect(screen.getByText("这里的比喻不错")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认删除注释1" })).toBeInTheDocument();
+
+    // 点“确认删除”后才消失
+    fireEvent.click(screen.getByRole("button", { name: "确认删除注释1" }));
     expect(screen.queryByText("这里的比喻不错")).not.toBeInTheDocument();
-    expect(screen.queryByText("第 1 段批注")).not.toBeInTheDocument();
 
     await waitFor(
       () => {
@@ -183,6 +185,16 @@ describe("NoteView 内联注释(编辑/确认)", () => {
       },
       { timeout: 4000 }
     );
+  });
+
+  it("点“取消”则保留注释", async () => {
+    render(<NoteView />);
+    await screen.findByText("这里的比喻不错");
+
+    fireEvent.click(screen.getByRole("button", { name: "删除注释1" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消删除注释1" }));
+    expect(screen.getByText("这里的比喻不错")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认删除注释1" })).not.toBeInTheDocument();
   });
 
   it("无注释笔记显示引导提示(无文末按钮)", async () => {

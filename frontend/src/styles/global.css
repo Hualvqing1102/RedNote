@@ -1193,3 +1193,21 @@ a.btn { text-decoration: none; }
   word-break: break-all;
 }
 .annotate-links a:hover { color: var(--green); }
+
+/* ---------- 删除前确认 ---------- */
+.delete-confirm {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: #a33; white-space: nowrap;
+}
+.delete-confirm .confirm {
+  font-size: 12px; padding: 3px 10px; border-radius: 6px;
+}
+.delete-confirm .confirm.yes {
+  color: #fff; background: #a33; border: 1px solid #a33;
+}
+.delete-confirm .confirm.yes:hover { background: #8b2a2a; }
+.delete-confirm .confirm.no {
+  color: var(--muted); background: var(--surface); border: 1px solid var(--line);
+}
+.delete-confirm .confirm.no:hover { color: var(--ink); border-color: var(--muted); }
+.annotate-view-head { min-height: 26px; }

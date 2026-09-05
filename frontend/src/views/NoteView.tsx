@@ -64,6 +64,8 @@ export default function NoteView() {
   const [dragId, setDragId] = useState<string | null>(null);
   // 处于“编辑中”的注释卡（未确认前显示输入框；确认后显示为摘要卡片样式）
   const [editIds, setEditIds] = useState<Set<string>>(new Set());
+  // 正在询问“是否删除”的注释卡（点击删除后先确认，不直接删）
+  const [delIds, setDelIds] = useState<Set<string>>(new Set());
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
@@ -285,6 +287,24 @@ export default function NoteView() {
     });
   }
 
+  // 删除前先确认
+  function askDelete(id: string) {
+    setDelIds((prev) => new Set(prev).add(id));
+  }
+
+  function cancelDelete(id: string) {
+    setDelIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  function confirmDelete(id: string) {
+    removeComment(id);
+    cancelDelete(id);
+  }
+
   // 确认：立即保存并切换到“摘要卡片”阅读样式
   async function confirmComment(id: string) {
     if (!note) return;
@@ -494,13 +514,33 @@ export default function NoteView() {
                             </button>
                             <span className="tag">第 {row.anchor + 1} 段批注</span>
                             <span className="spacer" />
-                            <button
-                              className="head-btn danger"
-                              aria-label={`删除注释${num}`}
-                              onClick={() => removeComment(card.id)}
-                            >
-                              删除
-                            </button>
+                            {delIds.has(card.id) ? (
+                              <span className="delete-confirm">
+                                确定删除？
+                                <button
+                                  className="confirm yes"
+                                  aria-label={`确认删除注释${num}`}
+                                  onClick={() => confirmDelete(card.id)}
+                                >
+                                  删除
+                                </button>
+                                <button
+                                  className="confirm no"
+                                  aria-label={`取消删除注释${num}`}
+                                  onClick={() => cancelDelete(card.id)}
+                                >
+                                  取消
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                className="head-btn danger"
+                                aria-label={`删除注释${num}`}
+                                onClick={() => askDelete(card.id)}
+                              >
+                                删除
+                              </button>
+                            )}
                           </div>
                           <textarea
                             value={card.text}
@@ -556,22 +596,41 @@ export default function NoteView() {
                         className="note-summary annotate-view"
                       >
                         <div className="annotate-view-head">
-                          <h4>第 {row.anchor + 1} 段批注</h4>
-                          <div className="annotate-view-actions">
-                            <button
-                              aria-label={`编辑注释${num}`}
-                              onClick={() => enterEdit(card.id)}
-                            >
-                              编辑
-                            </button>
-                            <button
-                              className="danger"
-                              aria-label={`删除注释${num}`}
-                              onClick={() => removeComment(card.id)}
-                            >
-                              删除
-                            </button>
-                          </div>
+                          {delIds.has(card.id) ? (
+                            <div className="delete-confirm">
+                              确定删除这条注释？
+                              <button
+                                className="confirm yes"
+                                aria-label={`确认删除注释${num}`}
+                                onClick={() => confirmDelete(card.id)}
+                              >
+                                删除
+                              </button>
+                              <button
+                                className="confirm no"
+                                aria-label={`取消删除注释${num}`}
+                                onClick={() => cancelDelete(card.id)}
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="annotate-view-actions">
+                              <button
+                                aria-label={`编辑注释${num}`}
+                                onClick={() => enterEdit(card.id)}
+                              >
+                                编辑
+                              </button>
+                              <button
+                                className="danger"
+                                aria-label={`删除注释${num}`}
+                                onClick={() => askDelete(card.id)}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          )}
                         </div>
                         {card.text && <p>{card.text}</p>}
                         {card.links.length > 0 && (
