@@ -1436,7 +1436,7 @@ a.btn { text-decoration: none; }
   grid-template-columns: 200px minmax(0, 1fr) 320px;
 }
 .note-layout .reader-rail {
-  position: sticky; top: 8px; align-self: start;
+  position: sticky; top: 0; align-self: start; margin: 0;
   max-height: calc(100vh - 130px); overflow-y: auto;
   display: flex; flex-direction: column; gap: 1px;
   padding: 10px 8px;
