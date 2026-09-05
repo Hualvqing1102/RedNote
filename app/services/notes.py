@@ -31,7 +31,8 @@ def _points_to_json(points: Any) -> str:
 def _comments_to_json(comments: Any) -> str:
     """把客户端提交的注释卡片规整为可持久化的 JSON。
 
-    每张卡片：{id, text, links:[{title, url}]}；顺序即展示顺序（供排序）。
+    每张卡片：{id, text, links:[{title, url}], anchor?}；anchor 为锚定段落序号，
+    anchor 与数组顺序共同决定注释在正文中的展示位置。
     """
     if not isinstance(comments, list):
         return "[]"
@@ -57,13 +58,15 @@ def _comments_to_json(comments: Any) -> str:
                 links.append(cleaned)
         if not text and not links:
             continue
-        cards.append(
-            {
-                "id": str(raw.get("id") or f"c{_now()}")[:80],
-                "text": text,
-                "links": links,
-            }
-        )
+        card: dict[str, Any] = {
+            "id": str(raw.get("id") or f"c{_now()}")[:80],
+            "text": text,
+            "links": links,
+        }
+        anchor = raw.get("anchor")
+        if isinstance(anchor, (int, float)) and not isinstance(anchor, bool) and anchor >= 0:
+            card["anchor"] = int(anchor)
+        cards.append(card)
     return json.dumps(cards, ensure_ascii=False)
 
 

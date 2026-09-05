@@ -7,6 +7,8 @@ export interface CommentCard {
   id: string;
   text: string;
   links: CommentLink[];
+  /** 锚定段落序号：0 = 第 1 段；缺省时显示在全文末尾段落之后 */
+  anchor?: number;
 }
 
 export interface Note {

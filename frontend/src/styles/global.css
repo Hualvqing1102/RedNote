@@ -1090,3 +1090,76 @@ a.btn { text-decoration: none; }
 .cc-link .link-remove:hover { color: #a33; background: rgba(170, 51, 51, 0.08); }
 .cc-card-actions { margin-top: 6px; }
 .comment-actions { display: flex; gap: 10px; align-items: center; }
+
+/* ---------- 内联段落批注(正文中) ---------- */
+.annotate-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 0 0 10px; flex-wrap: wrap;
+}
+.annotate-bar .hint { font-size: 12.5px; color: var(--muted); }
+.save-state {
+  font-size: 12px; color: var(--green-deep);
+  background: #e6f2e9; padding: 2px 10px; border-radius: 999px; white-space: nowrap;
+}
+.body.annotated { position: relative; }
+.article-block { border-radius: 4px; }
+.article-block.ctx-target {
+  background: rgba(233, 226, 75, 0.3);
+  box-shadow: 0 0 0 1px rgba(199, 184, 90, 0.8);
+}
+.body.annotated.dragging { user-select: none; cursor: grabbing; }
+
+.inline-comment {
+  border: 1px solid var(--line); border-left: 3px solid var(--green);
+  background: var(--surface); border-radius: 8px;
+  padding: 8px 12px 10px; margin: 12px 0 12px 8px;
+  box-shadow: var(--shadow);
+}
+.inline-comment.dragging { opacity: 0.35; }
+.inline-comment-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.grip {
+  cursor: grab; color: var(--muted); font-size: 13px; line-height: 1;
+  padding: 4px 7px; border-radius: 6px; touch-action: none;
+}
+.grip:hover { color: var(--ink); background: rgba(32, 38, 31, 0.06); }
+.inline-comment-head .tag { font-family: var(--mono); }
+.inline-comment-head .spacer { flex: 1; }
+.head-btn {
+  font-size: 12px; color: var(--muted); padding: 3px 9px;
+  border: 1px solid var(--line); border-radius: 6px;
+}
+.head-btn:hover { color: var(--ink); }
+.head-btn.danger:hover { color: #a33; border-color: #e0c0c0; }
+.inline-comment textarea {
+  width: 100%; min-height: 62px; resize: vertical;
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 11px; font-size: 14px; line-height: 1.7;
+}
+.inline-comment textarea:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: transparent; }
+
+.drop-line {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 2px solid var(--green);
+  opacity: 0; pointer-events: none; transition: top 0.06s linear;
+}
+
+/* ---------- 右键插入菜单 ---------- */
+.ctx-menu {
+  position: fixed; z-index: 60; min-width: 210px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: var(--shadow); padding: 6px;
+}
+.ctx-menu .ctx-title {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  padding: 3px 8px 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px;
+}
+.ctx-menu button {
+  display: block; width: 100%; text-align: left;
+  padding: 7px 10px; font-size: 13.5px; border-radius: 6px;
+}
+.ctx-menu button:hover { background: rgba(46, 107, 76, 0.1); color: var(--green-deep); }
+.ctx-preview {
+  margin-top: 4px; padding: 5px 8px; font-size: 12px; color: var(--muted);
+  max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-top: 1px dashed var(--line);
+}

@@ -12,7 +12,6 @@ import type { ReactNode } from "react";
 type Inline = { kind: string; text: string };
 
 const INLINE_RE = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]*\))/g;
-
 function splitInline(text: string): Inline[] {
   return text
     .split(INLINE_RE)
@@ -54,7 +53,7 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
   });
 }
 
-type Block =
+export type Block =
   | { kind: "heading"; level: number; text: string }
   | { kind: "ul"; items: string[] }
   | { kind: "ol"; items: string[] }
@@ -107,46 +106,49 @@ export function splitBlocks(text: string): Block[] {
     });
 }
 
+/** 渲染单个块级元素（供逐块内联插入注释时使用）。 */
+export function renderOneBlock(block: Block, index: number): ReactNode {
+  switch (block.kind) {
+    case "heading": {
+      const Tag = (["h3", "h4", "h5", "h6", "h6", "h6"] as const)[
+        Math.min(block.level - 1, 5)
+      ];
+      return <Tag key={index}>{renderInline(block.text, `h${index}`)}</Tag>;
+    }
+    case "ul":
+      return (
+        <ul key={index}>
+          {block.items.map((item, i) => (
+            <li key={i}>{renderInline(item, `u${index}-${i}`)}</li>
+          ))}
+        </ul>
+      );
+    case "ol":
+      return (
+        <ol key={index}>
+          {block.items.map((item, i) => (
+            <li key={i}>{renderInline(item, `o${index}-${i}`)}</li>
+          ))}
+        </ol>
+      );
+    case "quote":
+      return (
+        <blockquote key={index}>
+          {block.lines.map((line, i) => (
+            <p key={i}>{renderInline(line, `q${index}-${i}`)}</p>
+          ))}
+        </blockquote>
+      );
+    case "rule":
+      return <hr key={index} />;
+    default:
+      return <p key={index}>{renderInline(block.text, `p${index}`)}</p>;
+  }
+}
+
 /** 把 Markdown 正文渲染成块级元素（标题/列表/段落等）。 */
 export function renderBlocks(text: string): ReactNode[] {
-  return splitBlocks(text).map((block, index) => {
-    switch (block.kind) {
-      case "heading": {
-        const Tag = (["h3", "h4", "h5", "h6", "h6", "h6"] as const)[
-          Math.min(block.level - 1, 5)
-        ];
-        return <Tag key={index}>{renderInline(block.text, `h${index}`)}</Tag>;
-      }
-      case "ul":
-        return (
-          <ul key={index}>
-            {block.items.map((item, i) => (
-              <li key={i}>{renderInline(item, `u${index}-${i}`)}</li>
-            ))}
-          </ul>
-        );
-      case "ol":
-        return (
-          <ol key={index}>
-            {block.items.map((item, i) => (
-              <li key={i}>{renderInline(item, `o${index}-${i}`)}</li>
-            ))}
-          </ol>
-        );
-      case "quote":
-        return (
-          <blockquote key={index}>
-            {block.lines.map((line, i) => (
-              <p key={i}>{renderInline(line, `q${index}-${i}`)}</p>
-            ))}
-          </blockquote>
-        );
-      case "rule":
-        return <hr key={index} />;
-      default:
-        return <p key={index}>{renderInline(block.text, `p${index}`)}</p>;
-    }
-  });
+  return splitBlocks(text).map(renderOneBlock);
 }
 
 /** 段落渲染：纯文本按空行分段（供原文摘录等非 Markdown 场景使用）。 */

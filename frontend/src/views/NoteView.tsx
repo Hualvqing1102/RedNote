@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
-import { renderBlocks } from "../lib/markdown";
+import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
+import { relocateComment, rowsFor } from "../lib/annotations";
 import { useAppStore } from "../store/useAppStore";
 import type { CommentCard, Note, SettingsResponse } from "../types";
 
@@ -9,6 +10,14 @@ interface Msg {
   role: "user" | "ai";
   text: string;
 }
+
+interface CtxMenu {
+  x: number;
+  y: number;
+  blockIndex: number;
+}
+
+const AUTOSAVE_MS = 900;
 
 let commentSeq = 0;
 
@@ -21,6 +30,14 @@ function formatDate(epoch: number): string {
   const d = new Date(epoch * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 用于右键菜单里预览段落内容。 */
+function snippetOf(block: Block): string {
+  if (block.kind === "heading" || block.kind === "para") return block.text;
+  if (block.kind === "quote") return block.lines.join(" ");
+  if (block.kind === "ul" || block.kind === "ol") return block.items.join(" · ");
+  return "";
 }
 
 export default function NoteView() {
@@ -37,12 +54,21 @@ export default function NoteView() {
   const [error, setError] = useState("");
   const [engine, setEngine] = useState<SettingsResponse | null>(null);
   const [engineError, setEngineError] = useState(false);
-  // 注释卡片(独立面板，可增删/排序)
+
+  // 注释：内联锚定在正文段落之后
   const [comments, setComments] = useState<CommentCard[]>([]);
   const [commentsDirty, setCommentsDirty] = useState(false);
-  const [savingComments, setSavingComments] = useState(false);
-  const [commentsMsg, setCommentsMsg] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
+  const [menu, setMenu] = useState<CtxMenu | null>(null);
+  const [focusCardId, setFocusCardId] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLDivElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const blocksRef = useRef(0);
 
   useEffect(() => {
     if (!noteId) return;
@@ -54,7 +80,7 @@ export default function NoteView() {
         setEditing(false);
         setComments(n.comments || []);
         setCommentsDirty(false);
-        setCommentsMsg("");
+        setSaveState("idle");
         setMessages([
           {
             role: "ai",
@@ -75,6 +101,112 @@ export default function NoteView() {
       el.scrollTo({ top: el.scrollHeight });
     }
   }, [messages, typing]);
+
+  // 注释改动后防抖自动保存
+  useEffect(() => {
+    if (!commentsDirty || !note) return;
+    const snapshot = JSON.stringify(commentsRef.current);
+    const timer = setTimeout(async () => {
+      setSaveState("idle");
+      const cleaned = commentsRef.current.filter(
+        (c) => c.text.trim() || c.links.some((l) => l.url.trim())
+      );
+      try {
+        await api.updateNote(note.id, { comments: cleaned });
+        if (JSON.stringify(commentsRef.current) === snapshot) {
+          setCommentsDirty(false);
+          setSaveState("saved");
+        }
+        // 若保存期间又有新编辑，保留 dirty，下一轮继续自动保存
+      } catch {
+        setSaveState("error");
+      }
+    }, AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentsDirty, comments, note]);
+
+  // “已自动保存”短暂提示后淡出
+  useEffect(() => {
+    if (saveState !== "saved") return;
+    const t = setTimeout(() => setSaveState("idle"), 2400);
+    return () => clearTimeout(t);
+  }, [saveState]);
+
+  // 新插入的卡片聚焦到输入框
+  useEffect(() => {
+    if (!focusCardId) return;
+    const t = setTimeout(() => {
+      const el = bodyRef.current?.querySelector<HTMLTextAreaElement>(
+        `[data-cid="${focusCardId}"] textarea`
+      );
+      el?.focus();
+      setFocusCardId(null);
+    }, 30);
+    return () => clearTimeout(t);
+  }, [focusCardId]);
+
+  // 关闭右键菜单
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [menu]);
+
+  // 拖拽移动注释卡片
+  useEffect(() => {
+    if (!dragId) return;
+    const container = bodyRef.current;
+    if (!container) return;
+    const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-row]"));
+    const line = lineRef.current;
+    const dropSlot = { value: rows.length };
+
+    const rowMid = (el: HTMLElement) => {
+      const r = el.getBoundingClientRect();
+      return r.top + r.height / 2;
+    };
+
+    const move = (e: PointerEvent) => {
+      let slot = rows.length;
+      for (let i = 0; i < rows.length; i += 1) {
+        if (e.clientY < rowMid(rows[i])) {
+          slot = i;
+          break;
+        }
+      }
+      dropSlot.value = slot;
+      if (line) {
+        const anchorEl = slot < rows.length ? rows[slot] : rows[rows.length - 1];
+        const rect = anchorEl.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        line.style.top =
+          slot < rows.length
+            ? `${rect.top - containerRect.top - 2}px`
+            : `${rect.bottom - containerRect.top - 2}px`;
+        line.style.opacity = "1";
+      }
+    };
+
+    const up = () => {
+      const list = commentsRef.current;
+      const next = relocateComment(list, dragId, dropSlot.value, blocksRef.current);
+      setComments(next);
+      setDragId(null);
+      if (line) line.style.opacity = "0";
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up, { once: true });
+    window.addEventListener("pointercancel", up, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragId]);
 
   async function saveEdit() {
     if (!note) return;
@@ -118,28 +250,24 @@ export default function NoteView() {
     }
   }
 
-  // ------------------------------------------------ 注释卡片
+  // ------------------------------------------------ 注释编辑
 
   function touchComments(next: CommentCard[]) {
     setComments(next);
     setCommentsDirty(true);
-    setCommentsMsg("");
+    setSaveState("idle");
   }
 
-  function addComment() {
-    touchComments([...comments, { id: newCardId(), text: "", links: [] }]);
+  function addCommentAt(blockIndex: number) {
+    if (!note) return;
+    const id = newCardId();
+    const blocks = splitBlocks(note.content).length;
+    touchComments([...comments, { id, text: "", links: [], anchor: Math.min(blockIndex, blocks - 1) }]);
+    setFocusCardId(id);
   }
 
   function removeComment(id: string) {
     touchComments(comments.filter((c) => c.id !== id));
-  }
-
-  function moveComment(index: number, dir: -1 | 1) {
-    const target = index + dir;
-    if (target < 0 || target >= comments.length) return;
-    const next = [...comments];
-    [next[index], next[target]] = [next[target], next[index]];
-    touchComments(next);
   }
 
   function patchComment(id: string, patch: Partial<CommentCard>) {
@@ -170,23 +298,6 @@ export default function NoteView() {
     );
   }
 
-  async function saveComments() {
-    if (!note) return;
-    setSavingComments(true);
-    setCommentsMsg("");
-    try {
-      const updated = await api.updateNote(note.id, { comments });
-      setNote(updated);
-      setComments(updated.comments || []);
-      setCommentsDirty(false);
-      setCommentsMsg("注释已保存");
-    } catch (e) {
-      setCommentsMsg(e instanceof Error ? e.message : "保存失败");
-    } finally {
-      setSavingComments(false);
-    }
-  }
-
   if (!note) {
     return <div className="hint">加载中…</div>;
   }
@@ -198,6 +309,18 @@ export default function NoteView() {
       ? describeEngine(engine)
       : "";
   const showEngine = Boolean(engine || engineError);
+
+  const blocks = splitBlocks(note.content);
+  blocksRef.current = blocks.length;
+  const rows = rowsFor(blocks.length, comments);
+  const cardOrder = new Map<string, number>();
+  comments.forEach((c, i) => cardOrder.set(c.id, i + 1));
+
+  const menuBlock = menu
+    ? menu.blockIndex < blocks.length
+      ? blocks[menu.blockIndex]
+      : null
+    : null;
 
   return (
     <div className="note-layout">
@@ -259,7 +382,149 @@ export default function NoteView() {
             aria-label="笔记正文编辑区"
           />
         ) : (
-          <div className="body">{renderBlocks(note.content)}</div>
+          <div className="annotated-article">
+            <div className="annotate-bar">
+              <span className="hint">
+                {comments.length === 0
+                  ? "提示：右键点击正文任意段落，可在该段落后插入注释"
+                  : `正文中已插入 ${comments.length} 条注释（拖动手柄可移动到其他段落）`}
+              </span>
+              {(commentsDirty || saveState === "saved" || saveState === "error") && (
+                <span className="save-state" role="status">
+                  {saveState === "saved"
+                    ? "已自动保存 ✓"
+                    : saveState === "error"
+                      ? "自动保存失败，继续编辑将重试"
+                      : "编辑中…将自动保存"}
+                </span>
+              )}
+            </div>
+
+            <div
+              ref={bodyRef}
+              className={`body annotated${dragId ? " dragging" : ""}`}
+              onContextMenu={(e) => {
+                if (editing) return;
+                e.preventDefault();
+                const rowEl = (e.target as HTMLElement).closest<HTMLElement>("[data-row]");
+                const key = rowEl?.dataset.row;
+                const blockIndex = key?.startsWith("b") ? Number(key.slice(1)) : -1;
+                if (blockIndex >= 0 && blockIndex < blocks.length) {
+                  setMenu({ x: e.clientX, y: e.clientY, blockIndex });
+                }
+              }}
+            >
+              {rows.map((row) =>
+                row.type === "block" ? (
+                  <div
+                    key={row.key}
+                    data-row={row.key}
+                    className={`article-block${menu?.blockIndex === row.index ? " ctx-target" : ""}`}
+                  >
+                    {renderOneBlock(blocks[row.index], row.index)}
+                  </div>
+                ) : (
+                  (() => {
+                    const card = comments.find((c) => `c:${c.id}` === row.key);
+                    if (!card) return null;
+                    const num = cardOrder.get(card.id) ?? 0;
+                    return (
+                      <div
+                        key={row.key}
+                        data-row={row.key}
+                        data-cid={card.id}
+                        className={`inline-comment${dragId === card.id ? " dragging" : ""}`}
+                      >
+                        <div className="inline-comment-head">
+                          <button
+                            className="grip"
+                            title="拖动移动到其他段落"
+                            aria-label={`移动注释${num}`}
+                            onPointerDown={(e) => {
+                              e.preventDefault();
+                              setDragId(card.id);
+                            }}
+                          >
+                            ⣿
+                          </button>
+                          <span className="tag">第 {row.anchor + 1} 段批注</span>
+                          <span className="spacer" />
+                          <button
+                            className="head-btn danger"
+                            aria-label={`删除注释${num}`}
+                            onClick={() => removeComment(card.id)}
+                          >
+                            删除
+                          </button>
+                        </div>
+                        <textarea
+                          value={card.text}
+                          placeholder="写下你的注释/想法…"
+                          aria-label={`注释${num}正文`}
+                          onChange={(e) => patchComment(card.id, { text: e.target.value })}
+                        />
+                        {card.links.map((link, j) => (
+                          <div className="cc-link" key={j}>
+                            <input
+                              type="text"
+                              value={link.title}
+                              placeholder="链接标题"
+                              aria-label={`注释${num}链接${j + 1}标题`}
+                              onChange={(e) => patchLink(card.id, j, { title: e.target.value })}
+                            />
+                            <input
+                              type="url"
+                              value={link.url}
+                              placeholder="https://…"
+                              aria-label={`注释${num}链接${j + 1}地址`}
+                              onChange={(e) => patchLink(card.id, j, { url: e.target.value })}
+                            />
+                            <button
+                              className="link-remove"
+                              aria-label={`删除注释${num}的链接${j + 1}`}
+                              onClick={() => removeLink(card.id, j)}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <div className="cc-card-actions">
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => addLink(card.id)}
+                          >
+                            ＋ 添加相关链接
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )
+              )}
+              <div className="drop-line" ref={lineRef} aria-hidden="true" />
+            </div>
+          </div>
+        )}
+
+        {menu && (
+          <div
+            className="ctx-menu"
+            style={{ left: menu.x, top: menu.y }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="ctx-title">第 {menu.blockIndex + 1} 段</div>
+            <button
+              onClick={() => {
+                addCommentAt(menu.blockIndex);
+                setMenu(null);
+              }}
+            >
+              在此段后插入注释
+            </button>
+            {menuBlock && (
+              <div className="ctx-preview">{snippetOf(menuBlock).slice(0, 40)}</div>
+            )}
+          </div>
         )}
 
         <div className="note-actions">
@@ -283,110 +548,6 @@ export default function NoteView() {
             删除
           </button>
         </div>
-
-        <section className="note-comments" aria-label="我的注释与相关链接">
-          <h4>我的注释与相关链接</h4>
-          <p className="hint">把阅读时的想法记下来，或补充相关延伸阅读链接；卡片可增删、可上下排序。</p>
-
-          {commentsMsg && (
-            <div className={`comments-msg${commentsMsg.includes("已保存") ? "" : " error"}`} role="status">
-              {commentsMsg}
-            </div>
-          )}
-
-          {comments.length === 0 ? (
-            <div className="comments-empty">
-              还没有注释。点击「＋ 添加注释卡片」在你想记录的位置插入一张卡片。
-            </div>
-          ) : (
-            <div className="comment-list">
-              {comments.map((card, i) => (
-                <article className="comment-card" key={card.id}>
-                  <div className="cc-bar">
-                    <span className="cc-no">#{i + 1}</span>
-                    <div className="cc-tools">
-                      <button
-                        aria-label={`上移注释${i + 1}`}
-                        disabled={i === 0}
-                        onClick={() => moveComment(i, -1)}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        aria-label={`下移注释${i + 1}`}
-                        disabled={i === comments.length - 1}
-                        onClick={() => moveComment(i, 1)}
-                      >
-                        ↓
-                      </button>
-                      <button
-                        className="danger"
-                        aria-label={`删除注释${i + 1}`}
-                        onClick={() => removeComment(card.id)}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </div>
-
-                  <textarea
-                    value={card.text}
-                    placeholder="写下你的注释/想法…"
-                    aria-label={`注释${i + 1}正文`}
-                    onChange={(e) => patchComment(card.id, { text: e.target.value })}
-                  />
-
-                  {card.links.map((link, j) => (
-                    <div className="cc-link" key={j}>
-                      <input
-                        type="text"
-                        value={link.title}
-                        placeholder="链接标题"
-                        aria-label={`注释${i + 1}链接${j + 1}标题`}
-                        onChange={(e) => patchLink(card.id, j, { title: e.target.value })}
-                      />
-                      <input
-                        type="url"
-                        value={link.url}
-                        placeholder="https://…"
-                        aria-label={`注释${i + 1}链接${j + 1}地址`}
-                        onChange={(e) => patchLink(card.id, j, { url: e.target.value })}
-                      />
-                      <button
-                        className="link-remove"
-                        aria-label={`删除注释${i + 1}的链接${j + 1}`}
-                        onClick={() => removeLink(card.id, j)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-
-                  <div className="cc-card-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => addLink(card.id)}>
-                      ＋ 添加相关链接
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <div className="comment-actions">
-            <button className="btn btn-ghost btn-sm" onClick={addComment}>
-              ＋ 添加注释卡片
-            </button>
-            {commentsDirty && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={saveComments}
-                disabled={savingComments}
-              >
-                {savingComments ? "保存中…" : "保存注释"}
-              </button>
-            )}
-          </div>
-        </section>
       </div>
 
       <aside className="ask-panel">

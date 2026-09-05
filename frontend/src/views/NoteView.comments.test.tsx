@@ -23,8 +23,8 @@ const NOTES: Record<number, Note> = {
     content: "第一段正文。\n\n第二段正文。",
     points: ["要点一"],
     comments: [
-      { id: "c1", text: "这里的比喻不错", links: [{ title: "原始论文", url: "https://arxiv.org/a" }] },
-      { id: "c2", text: "需要补充阅读", links: [] },
+      { id: "c1", text: "这里的比喻不错", links: [{ title: "原始论文", url: "https://arxiv.org/a" }], anchor: 0 },
+      { id: "c2", text: "需要补充阅读", links: [], anchor: 1 },
     ],
     source_url: "https://example.com/n",
     source_snapshot: "x",
@@ -56,83 +56,110 @@ const ENGINE: SettingsResponse = {
   active: { provider: "mock", available: true },
 };
 
-describe("NoteView 注释面板", () => {
+describe("NoteView 内联注释", () => {
   beforeEach(() => {
     useAppStore.setState({ view: "note", activeNoteId: 1 });
     vi.mocked(api.getNote).mockReset().mockImplementation((id) => Promise.resolve(NOTES[id]));
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(ENGINE);
-    vi.mocked(api.updateNote).mockReset();
+    vi.mocked(api.updateNote).mockReset().mockImplementation((id, patch) => {
+      const updated: Note = { ...NOTES[id], comments: patch.comments as CommentCard[] };
+      return Promise.resolve(updated);
+    });
     vi.mocked(api.ask).mockReset();
     vi.mocked(api.deleteNote).mockReset();
   });
 
-  it("展示已有注释卡片与相关链接", async () => {
+  it("注释内联显示在各自锚定段之后", async () => {
     render(<NoteView />);
-    expect(await screen.findByText("我的注释与相关链接")).toBeInTheDocument();
+    expect(await screen.findByText("第 1 段批注")).toBeInTheDocument();
+    expect(screen.getByText("第 2 段批注")).toBeInTheDocument();
     expect(screen.getByText("这里的比喻不错")).toBeInTheDocument();
     expect(screen.getByLabelText("注释1链接1标题")).toHaveValue("原始论文");
-    expect(screen.getByLabelText("注释1链接1地址")).toHaveValue("https://arxiv.org/a");
     expect(screen.getAllByLabelText(/注释\d+正文/)).toHaveLength(2);
+    // 底部不应再出现"添加注释卡片"按钮
+    expect(screen.queryByRole("button", { name: "＋ 添加注释卡片" })).not.toBeInTheDocument();
   });
 
-  it("新增卡片后可编辑并保存(随笔记持久化)", async () => {
-    vi.mocked(api.updateNote).mockImplementation((id, patch) => {
-      const updated: Note = { ...NOTES[id], comments: patch.comments as CommentCard[] };
-      return Promise.resolve(updated);
-    });
+  it("右键任意段落可插入注释，并自动保存", async () => {
     render(<NoteView />);
-    await screen.findByText("我的注释与相关链接");
+    const firstPara = await screen.findByText("第一段正文。");
 
-    fireEvent.click(screen.getByRole("button", { name: "＋ 添加注释卡片" }));
+    fireEvent.contextMenu(firstPara);
+    expect(screen.getByRole("button", { name: "在此段后插入注释" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "在此段后插入注释" }));
     const editors = screen.getAllByLabelText(/注释\d+正文/);
     expect(editors).toHaveLength(3);
-    fireEvent.change(editors[2], { target: { value: "新加的第三条注释" } });
-    const addLinkButtons = screen.getAllByRole("button", { name: "＋ 添加相关链接" });
-    expect(addLinkButtons).toHaveLength(3);
-    fireEvent.click(addLinkButtons[2]); // 给第 3 张卡片加链接
-    fireEvent.change(screen.getByLabelText("注释3链接1标题"), {
-      target: { value: "参考链接" },
-    });
-    fireEvent.change(screen.getByLabelText("注释3链接1地址"), {
-      target: { value: "https://deepwiki.com/x" },
-    });
 
-    fireEvent.click(screen.getByRole("button", { name: "保存注释" }));
-    await waitFor(() => {
-      expect(api.updateNote).toHaveBeenCalledWith(1, {
-        comments: expect.arrayContaining([
-          expect.objectContaining({ text: "新加的第三条注释" }),
-        ]),
-      });
+    // 新卡片锚定第 1 段
+    fireEvent.change(screen.getByLabelText("注释3正文"), {
+      target: { value: "新插入的批注内容" },
     });
-    expect(await screen.findByText("注释已保存")).toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(api.updateNote).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({
+            comments: expect.arrayContaining([
+              expect.objectContaining({ text: "新插入的批注内容", anchor: 0 }),
+            ]),
+          })
+        );
+      },
+      { timeout: 4000 }
+    );
+    expect(await screen.findByText(/已自动保存/)).toBeInTheDocument();
   });
 
-  it("删除注释卡片", async () => {
+  it("可在注释卡片中添加相关链接", async () => {
     render(<NoteView />);
-    await screen.findByText("我的注释与相关链接");
-    expect(screen.getAllByLabelText(/注释\d+正文/)).toHaveLength(2);
+    await screen.findByText("第 2 段批注");
+
+    const linkButtons = screen.getAllByRole("button", { name: "＋ 添加相关链接" });
+    fireEvent.click(linkButtons[1]); // 给第 2 张卡片加链接
+    fireEvent.change(screen.getByLabelText("注释2链接1地址"), {
+      target: { value: "https://example.com/ref" },
+    });
+    fireEvent.change(screen.getByLabelText("注释2链接1标题"), {
+      target: { value: "延伸阅读" },
+    });
+
+    await waitFor(
+      () => {
+        const call = vi.mocked(api.updateNote).mock.calls.find(
+          ([, patch]) =>
+            (patch.comments ?? []).some(
+              (c) =>
+                c.id === "c2" && c.links.some((l) => l.url === "https://example.com/ref")
+            )
+        );
+        expect(call).toBeTruthy();
+      },
+      { timeout: 4000 }
+    );
+  });
+
+  it("删除注释卡片后自动保存", async () => {
+    render(<NoteView />);
+    await screen.findByText("第 1 段批注");
 
     fireEvent.click(screen.getByRole("button", { name: "删除注释1" }));
     expect(screen.getAllByLabelText(/注释\d+正文/)).toHaveLength(1);
     expect(screen.queryByText("这里的比喻不错")).not.toBeInTheDocument();
-    // 出现脏标记 → 可保存
-    expect(screen.getByRole("button", { name: "保存注释" })).toBeInTheDocument();
+
+    await waitFor(
+      () => {
+        const calls = vi.mocked(api.updateNote).mock.calls;
+        const last = calls[calls.length - 1];
+        expect((last?.[1].comments ?? []).some((c: CommentCard) => c.id === "c1")).toBe(false);
+      },
+      { timeout: 4000 }
+    );
   });
 
-  it("上下移动改变卡片顺序", async () => {
-    render(<NoteView />);
-    await screen.findByText("我的注释与相关链接");
-
-    fireEvent.click(screen.getByRole("button", { name: "下移注释1" }));
-    // c2 应上移到第一位：其正文输入框变成注释1正文
-    const firstEditor = screen.getByLabelText("注释1正文");
-    expect((firstEditor as HTMLTextAreaElement).value).toBe("需要补充阅读");
-  });
-
-  it("无注释笔记展示空态", async () => {
+  it("无注释笔记显示引导提示(无文末按钮)", async () => {
     useAppStore.setState({ activeNoteId: 2 });
     render(<NoteView />);
-    expect(await screen.findByText(/还没有注释/)).toBeInTheDocument();
+    expect(await screen.findByText(/右键点击正文任意段落/)).toBeInTheDocument();
   });
 });
