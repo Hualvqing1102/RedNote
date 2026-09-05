@@ -1431,8 +1431,9 @@ a.btn { text-decoration: none; }
 /* ---------- 阅读布局：目录独立左栏 + 主内容 + 追问栏 ---------- */
 .annotated-article { display: block; }
 .note-layout.has-outline {
-  max-width: 1260px;
-  grid-template-columns: 216px minmax(0, 1fr) 320px;
+  max-width: none;
+  margin: 0 0 0 -28px; /* 让目录栏贴住最左侧功能栏(抵消 .content 左内边距) */
+  grid-template-columns: 200px minmax(0, 1fr) 320px;
 }
 .note-layout .reader-rail {
   position: sticky; top: 8px; align-self: start;
