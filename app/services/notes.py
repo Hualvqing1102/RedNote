@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.db import connect
+from app.services import media as media_service
 
 # 允许在更新接口中修改的字段（notes 表内字段）
 PATCHABLE = {"title", "summary", "content", "points", "comments", "source_url", "source_snapshot"}
@@ -134,6 +135,9 @@ def create_note(db_path: str | Path, data: dict[str, Any]) -> dict[str, Any]:
         note_id = cur.lastrowid
         if data.get(TAG_KEY):
             _attach_tags(conn, note_id, data[TAG_KEY])
+        # 把正文里引用的采集图片归属到这条笔记(复用当前事务连接，避免写锁冲突)
+        if data.get("content"):
+            media_service.bind_note_conn(conn, note_id, data["content"])
         return _fetch_note(conn, note_id)
 
 

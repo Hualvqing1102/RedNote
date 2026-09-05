@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from pathlib import Path
 
 SCHEMA = """
@@ -28,6 +29,17 @@ CREATE TABLE IF NOT EXISTS note_tags (
     tag_id  INTEGER NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,
     PRIMARY KEY (note_id, tag_id)
 );
+
+CREATE TABLE IF NOT EXISTS media (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    token      TEXT NOT NULL UNIQUE,          -- sha1(原图 URL)，笔记内容里以 /media/{token} 引用
+    note_id    INTEGER REFERENCES notes(id) ON DELETE CASCADE,  -- 未归属前为 NULL
+    url        TEXT NOT NULL,                 -- 原网页图片地址
+    mime       TEXT NOT NULL,
+    alt        TEXT NOT NULL DEFAULT '',
+    data       BLOB NOT NULL,
+    created_at INTEGER NOT NULL
+);
 """
 
 # 注释卡片 JSON 结构：
@@ -50,3 +62,8 @@ def init_db(db_path: str | Path) -> None:
         cols = {row[1] for row in conn.execute("PRAGMA table_info(notes)").fetchall()}
         if "comments" not in cols:
             conn.execute("ALTER TABLE notes ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'")
+        # 清理采集后一直没归属的孤儿图片（超过 24h）
+        conn.execute(
+            "DELETE FROM media WHERE note_id IS NULL AND created_at < ?",
+            (int(time.time()) - 86400,),
+        )
