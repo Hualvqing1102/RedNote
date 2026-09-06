@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --paper: #f3f3ed;
   --surface: #fbfbf6;
   --ink: #20261f;
@@ -1681,11 +1681,10 @@ a.btn { text-decoration: none; }
 .cal-drawer .drawer-form { flex: none; }
 @media (max-width: 1000px) { .cal-drawer { width: min(94vw, 340px); } }
 
-/* 周表：列头固定高度，时间区/刻度/方块共用同一基线 */
+/* 周表：去掉每列网格线与分隔线，只留最左侧时间刻度，看起来像一条长带 */
 .cal-week { position: relative; overflow: hidden; }
 .week-axis { position: absolute; top: 34px; left: 0; bottom: 0; width: 52px; border-right: 1px solid var(--line); }
-.week-col { position: relative; min-height: 820px; border-right: 1px solid var(--line); }
+.week-col { position: relative; min-height: 820px; border-right: none; }
 .week-col-head { position: absolute; top: 0; left: 0; right: 0; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: 700; background: #fbfbf6; border-bottom: 1px solid var(--line); z-index: 3; }
 .week-gridlines { position: absolute; top: 34px; left: 0; right: 0; bottom: 0; }
-.week-gridlines i { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(0,0,0,0.06); }
 .week-gridlines .ev-pinned { position: static; margin: 8px 4px 2px; width: calc(100% - 8px); }

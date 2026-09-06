@@ -41,39 +41,25 @@ function tsToDate(ts: number): Date {
   return new Date(ts * 1000);
 }
 
-/** 同一天内、时间重叠的日程分配“泳道”，返回每条的泳道号与当日最大并发数。 */
-function layoutLanes(items: EventItem[]): { placed: { item: EventItem; lane: number }[]; max: number } {
-  const sorted = [...items].sort((a, b) => a.start_ts - b.start_ts);
-  const intervals = sorted.map((ev) => ({
-    ev,
-    s: ev.start_ts,
-    e: ev.end_ts ?? ev.start_ts + 3600,
-  }));
-  // 最大并发
-  const events: [number, number][] = [];
-  for (const it of intervals) {
-    events.push([it.s, 1], [it.e, -1]);
-  }
-  events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  let cur = 0;
-  let max = 1;
-  for (const [, d] of events) {
-    cur += d;
-    max = Math.max(max, cur);
-  }
-  // 贪心泳道分配
-  const laneEnds: number[] = [];
-  const placed = intervals.map((it) => {
-    let lane = laneEnds.findIndex((e) => e <= it.s);
-    if (lane === -1) {
-      laneEnds.push(it.e);
-      lane = laneEnds.length - 1;
-    } else {
-      laneEnds[lane] = it.e;
-    }
-    return { item: it.ev, lane };
+/** 同一天内、时间重叠的日程“竖着排开”：后一个整体向下错开，保证都可见、不互相覆盖。 */
+function layoutStack(timed: EventItem[]): { item: EventItem; top: number; height: number }[] {
+  const rows = timed.map((ev) => {
+    const t = tsToDate(ev.start_ts);
+    const mins = t.getHours() * 60 + t.getMinutes();
+    const endMins = ev.end_ts
+      ? (() => { const e = tsToDate(ev.end_ts); return e.getHours() * 60 + e.getMinutes(); })()
+      : mins + 60;
+    const height = Math.max(44, ((endMins - mins) / 60) * PX_PER_HOUR);
+    return { ev, mins, height };
   });
-  return { placed, max: Math.max(max, 1) };
+  rows.sort((a, b) => a.mins - b.mins || a.ev.start_ts - b.ev.start_ts);
+  let bottom = 0;
+  return rows.map((r) => {
+    const naturalTop = (r.mins / 60) * PX_PER_HOUR;
+    const top = Math.max(naturalTop, bottom + 2);
+    bottom = top + r.height;
+    return { item: r.ev, top, height: r.height };
+  });
 }
 function fmtDayTitle(d: Date): string {
   const weeks = ["日", "一", "二", "三", "四", "五", "六"];
@@ -348,14 +334,14 @@ export default function CalendarView() {
           ) : (
             <div className="cal-week">
               <div className="week-axis">
-                {Array.from({ length: 25 }, (_, h) => h % 3 === 0 ? <span key={h} style={{ top: h * PX_PER_HOUR - 7 }}>{pad(h)}:00</span> : null)}
+                {Array.from({ length: 24 }, (_, h) => h % 3 === 0 ? <span key={h} style={{ top: h * PX_PER_HOUR - 7 }}>{pad(h)}:00</span> : null)}
               </div>
               {cells.map((d, i) => {
                 const key = dateKey(d);
                 const items = byDay.get(key) ?? [];
                 const timed = items.filter((ev) => ev.kind === "schedule" && !ev.all_day);
                 const others = items.filter((ev) => !(ev.kind === "schedule" && !ev.all_day));
-                const { placed, max } = layoutLanes(timed);
+                const stacked = layoutStack(timed);
                 return (
                   <div
                     key={i}
@@ -367,7 +353,6 @@ export default function CalendarView() {
                       className="week-gridlines"
                       onClick={(e) => { e.stopPropagation(); openNewAt(d, e.clientY, e.currentTarget); }}
                     >
-                      {Array.from({ length: 25 }, (_, h) => (h % 3 === 0 ? <i key={h} style={{ top: h * PX_PER_HOUR }} /> : null))}
                       {others.map((ev) => (
                         <button
                           key={ev.id}
@@ -377,23 +362,13 @@ export default function CalendarView() {
                           {ev.title}
                         </button>
                       ))}
-                      {placed.map(({ item: ev, lane }) => {
+                      {stacked.map(({ item: ev, top, height }) => {
                         const t = tsToDate(ev.start_ts);
-                        const mins = t.getHours() * 60 + t.getMinutes();
-                        const top = (mins / 60) * PX_PER_HOUR;
-                        const endMins = ev.end_ts ? (() => {
-                          const e = tsToDate(ev.end_ts);
-                          return e.getHours() * 60 + e.getMinutes();
-                        })() : mins + 60;
-                        const height = Math.max(44, ((endMins - mins) / 60) * PX_PER_HOUR);
-                        const laneWidth = max > 1
-                          ? { left: `calc(${(lane / max) * 100}% + 3px)`, width: `calc(${100 / max}% - 6px)` }
-                          : { left: 4, width: `calc(100% - 8px)` };
                         return (
                           <button
                             key={ev.id}
                             className={`ev-block ev-${ev.color}${ev.done ? " done" : ""}`}
-                            style={{ top, height, ...laneWidth }}
+                            style={{ top, height, left: 4, width: "calc(100% - 8px)" }}
                             onClick={(e) => { e.stopPropagation(); openDayDrawer(d, ev); }}
                           >
                             <span className="ev-time">{timeOf(t)}</span>

@@ -91,7 +91,7 @@ describe("CalendarView", () => {
     expect(await screen.findByText("周会")).toBeInTheDocument();
   });
 
-  it("周视图同一时间段的日程分配泳道、左右挤排显示", async () => {
+  it("周视图同一时间段的日程竖着排开、依次往下错开", async () => {
     const a = makeEvent({ id: 1, title: "会议A", start_ts: startOfToday() + 3600, end_ts: startOfToday() + 7200 });
     const b = makeEvent({ id: 2, title: "会议B", start_ts: startOfToday() + 5400, end_ts: startOfToday() + 7200 });
     vi.mocked(api.listEvents).mockReset().mockResolvedValue([a, b]);
@@ -101,17 +101,21 @@ describe("CalendarView", () => {
 
     const blocks = () => Array.from(container.querySelectorAll(".ev-block")) as HTMLElement[];
     await waitFor(() => expect(blocks().length).toBe(2));
-    const widths = blocks().map((el) => el.style.width);
-    expect(widths).toEqual(["calc(50% - 6px)", "calc(50% - 6px)"]);
+    // 均全宽，但后一个整体向下错开，不互相覆盖
+    expect(blocks().every((el) => el.style.width === "calc(100% - 8px)")).toBe(true);
+    const tops = blocks().map((el) => parseFloat(el.style.top));
+    expect(tops[1]).toBeGreaterThan(tops[0]);
   });
 
-  it("周视图点击时间栏即预填该时间新建日程", async () => {
+  it("周视图点击时间栏即预填该时间新建日程、结束时间自动+1小时", async () => {
     render(<CalendarView />);
     await screen.findByText("周会");
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     const grid = document.querySelectorAll(".week-gridlines")[0] as HTMLElement;
     fireEvent.click(grid, { clientY: 90 });
     const start = await screen.findByLabelText("开始时间");
+    const end = screen.getByLabelText("结束时间");
     expect((start as HTMLInputElement).value).toBe("03:00");
+    expect((end as HTMLInputElement).value).toBe("04:00");
   });
 });
