@@ -31,6 +31,9 @@ $mode = if ($SingleFile) { "--onefile" } else { "--onedir" }
     --add-data "frontend\dist;frontend_dist" `
     --hidden-import webview.platforms.winforms `
     --collect-data rapidocr_onnxruntime `
+    --collect-data trafilatura `
+    --collect-data htmldate `
+    --collect-data justext `
     run_desktop.py
 
 $out = if ($SingleFile) { Join-Path $root "dist\$Name.exe" } else { Join-Path $root "dist\$Name\$Name.exe" }

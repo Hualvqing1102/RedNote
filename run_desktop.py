@@ -25,6 +25,23 @@ def _pick_port() -> int:
         return s.getsockname()[1]
 
 
+def _setup_logging() -> None:
+    """把运行日志写入数据目录 desktop.log，便于桌面版排障。"""
+    import logging
+
+    try:
+        base = Path(os.getenv("REDNOTE_DATA_DIR") or "data")
+        handler = logging.FileHandler(base / "desktop.log", encoding="utf-8")
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        root = logging.getLogger()
+        root.addHandler(handler)
+        root.setLevel(logging.INFO)
+    except Exception:  # noqa: BLE001 - 日志失败不影响启动
+        pass
+
+
 def _wait_ready(url: str, timeout: float = 40.0) -> None:
     deadline = time.time() + timeout
     last_error: Exception | None = None
@@ -37,6 +54,27 @@ def _wait_ready(url: str, timeout: float = 40.0) -> None:
             last_error = exc
         time.sleep(0.15)
     raise RuntimeError(f"本地服务启动超时：{last_error}")
+
+
+def _warm_http_client(url: str) -> None:
+    """在加载 pythonnet(窗口)之前预热 httpx/httpcore 的异步后端模块。
+
+    原因：pythonnet 会向 sys.meta_path 注入自己的导入查找器，若 httpx 首次请求时
+    才动态导入 trio/sniffio 等后端，会撞上该查找器并抛
+    'module clr has no attribute _available_namespaces'（仅打包 exe 内出现）。
+    先在主线程跑一次真实请求，让这些模块进入 sys.modules，之后便不再动态导入。
+    """
+    try:
+        import asyncio
+        import httpx
+
+        async def _run() -> None:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                await client.get(url + "/api/notes")
+
+        asyncio.run(_run())
+    except Exception:  # noqa: BLE001 - 预热失败不阻塞，后续仍可运行
+        pass
 
 
 class DesktopApi:
@@ -82,6 +120,8 @@ def main() -> int:
             base = os.environ.get("APPDATA") or str(Path.home())
             os.environ["REDNOTE_DATA_DIR"] = str(Path(base) / "RedNote")
 
+    _setup_logging()
+
     from app.server import create_app
 
     import uvicorn
@@ -93,13 +133,22 @@ def main() -> int:
 
     app = create_app()
     server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=port,
+            log_level="warning",
+            # 不接管 logging 配置：由 _setup_logging 统一写 desktop.log，
+            # 否则 uvicorn 的 dictConfig 会替换掉我们挂到 root 的文件 handler
+            log_config=None,
+        )
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
 
     url = f"http://127.0.0.1:{port}"
     _wait_ready(url)
+    _warm_http_client(url)  # 必须先于 pythonnet/窗口，见 _warm_http_client 说明
 
     api = DesktopApi()
     window = webview.create_window(
