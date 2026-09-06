@@ -14,6 +14,7 @@ from app import settings as settings_store
 from app.db import init_db
 from app.services import agent as agent_service
 from app.services import collect as collect_service
+from app.services import events as events_service
 from app.services import export as export_service
 from app.services import folders as folders_service
 from app.services import notes as notes_service
@@ -65,6 +66,26 @@ class FolderIn(BaseModel):
 
 class FolderPatch(BaseModel):
     name: str
+
+
+class EventIn(BaseModel):
+    title: str
+    kind: str = "todo"
+    start_ts: int
+    end_ts: int | None = None
+    all_day: bool = False
+    done: bool = False
+    note_id: int | None = None
+
+
+class EventPatch(BaseModel):
+    title: str | None = None
+    kind: str | None = None
+    start_ts: int | None = None
+    end_ts: int | None = None
+    all_day: bool | None = None
+    done: bool | None = None
+    note_id: int | None = None
 
 
 class ProviderGroup(BaseModel):
@@ -236,6 +257,42 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
     def delete_folder(folder_id: int) -> None:
         if not folders_service.delete_folder(_path(), folder_id):
             raise HTTPException(status_code=404, detail="收藏夹不存在")
+
+    # ------------------------------------------------ 日历(日程/待办)
+
+    def _event_err(action: str) -> None:
+        raise HTTPException(status_code=400, detail=action)
+
+    @app.get("/api/events")
+    def list_events(
+        start: int | None = Query(default=None),
+        end: int | None = Query(default=None),
+    ) -> list[dict[str, Any]]:
+        return events_service.list_events(_path(), start, end)
+
+    @app.post("/api/events", status_code=201)
+    def create_event(payload: EventIn) -> dict[str, Any]:
+        try:
+            return events_service.create_event(_path(), payload.model_dump())
+        except ValueError as exc:
+            _event_err(str(exc))
+            raise
+
+    @app.patch("/api/events/{event_id}")
+    def update_event(event_id: int, payload: EventPatch) -> dict[str, Any]:
+        try:
+            event = events_service.update_event(_path(), event_id, payload.model_dump(exclude_unset=True))
+        except ValueError as exc:
+            _event_err(str(exc))
+            raise
+        if not event:
+            raise HTTPException(status_code=404, detail="事项不存在")
+        return event
+
+    @app.delete("/api/events/{event_id}", status_code=204)
+    def delete_event(event_id: int) -> None:
+        if not events_service.delete_event(_path(), event_id):
+            raise HTTPException(status_code=404, detail="事项不存在")
 
     # ------------------------------------------------ 导出 / 备份
 

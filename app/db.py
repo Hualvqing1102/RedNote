@@ -30,6 +30,19 @@ CREATE TABLE IF NOT EXISTS notes (
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    title      TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'todo',      -- 'schedule' 日程 | 'todo' 待办
+    start_ts   INTEGER NOT NULL,                  -- 秒级时间戳(本地)
+    end_ts     INTEGER,                           -- 日程结束(可为空)
+    all_day    INTEGER NOT NULL DEFAULT 0,
+    done       INTEGER NOT NULL DEFAULT 0,
+    note_id    INTEGER REFERENCES notes(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 """
 
 # 注释卡片 JSON 结构：
