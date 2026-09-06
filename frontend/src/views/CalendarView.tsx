@@ -334,7 +334,7 @@ export default function CalendarView() {
           ) : (
             <div className="cal-week">
               <div className="week-axis">
-                {Array.from({ length: 24 }, (_, h) => h % 3 === 0 ? <span key={h} style={{ top: h * PX_PER_HOUR - 7 }}>{pad(h)}:00</span> : null)}
+                {Array.from({ length: 24 }, (_, h) => h % 3 === 0 ? <span key={h} style={{ top: 34 + h * PX_PER_HOUR - 7 }}>{pad(h)}:00</span> : null)}
               </div>
               {cells.map((d, i) => {
                 const key = dateKey(d);
