@@ -1,7 +1,8 @@
-"""笔记数据层：CRUD、收藏夹归属、搜索（M1 用 LIKE，M3 升级 FTS5）。"""
+"""笔记数据层：CRUD、收藏夹归属、全文搜索(FTS5, 回退 LIKE)。"""
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -169,18 +170,55 @@ def delete_note(db_path: str | Path, note_id: int) -> bool:
         return cur.rowcount > 0
 
 
-def list_notes(db_path: str | Path, q: str = "", folder: int | None = None) -> list[dict[str, Any]]:
-    sql = "SELECT * FROM notes WHERE 1=1"
-    params: list[Any] = []
-    if q:
-        sql += " AND (title LIKE ? OR summary LIKE ? OR content LIKE ?)"
-        like = f"%{q}%"
-        params += [like, like, like]
-    if folder is not None:
-        sql += " AND folder_id = ?"
-        params.append(folder)
-    sql += " ORDER BY created_at DESC"
+def _fts_search(
+    conn: sqlite3.Connection,
+    query: str,
+    folder: int | None,
+) -> list[dict[str, Any]] | None:
+    """用 FTS5 索引搜索并按相关度排序；不适用(无索引/词太短)时返回 None 让调用方走 LIKE。
 
+    trigram 分词要求单个词 ≥3 个字符才能命中；标题(10) > 摘要(2) > 正文(1) 加权。
+    多个词用空格分隔，按“同时包含”匹配。
+    """
+    terms = [t for t in re.split(r"\s+", query) if t]
+    if not terms or any(len(t) < 3 for t in terms):
+        return None
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='notes_fts'"
+    ).fetchone():
+        return None
+    # 去掉 FTS 语法特殊字符后按短语查询(去掉引号避免截断)
+    phrases = ['"' + re.sub(r'["\\]', "", t) + '"' for t in terms]
+    params: list[Any] = [" ".join(phrases)]
+    sql = (
+        "SELECT n.* FROM notes_fts AS f "
+        "JOIN notes AS n ON n.id = f.rowid "
+        "WHERE notes_fts MATCH ?"
+    )
+    if folder is not None:
+        sql += " AND n.folder_id = ?"
+        params.append(folder)
+    sql += " ORDER BY bm25(notes_fts, 10.0, 2.0, 1.0) LIMIT 300"
+    return [_row_to_note(r, conn) for r in conn.execute(sql, params).fetchall()]
+
+
+def list_notes(db_path: str | Path, q: str = "", folder: int | None = None) -> list[dict[str, Any]]:
+    query = q.strip()
     with connect(db_path) as conn:
+        if query:
+            fts_rows = _fts_search(conn, query, folder)
+            if fts_rows is not None:
+                return fts_rows
+        # LIKE 回退(无索引环境 / 1-2 字的短词)
+        sql = "SELECT * FROM notes WHERE 1=1"
+        params: list[Any] = []
+        if query:
+            sql += " AND (title LIKE ? OR summary LIKE ? OR content LIKE ?)"
+            like = f"%{query}%"
+            params += [like, like, like]
+        if folder is not None:
+            sql += " AND folder_id = ?"
+            params.append(folder)
+        sql += " ORDER BY created_at DESC"
         rows = conn.execute(sql, params).fetchall()
         return [_row_to_note(r, conn) for r in rows]

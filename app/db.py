@@ -58,6 +58,57 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+# FTS5 全文索引：外部内容表(不重复存正文)，trigram 分词以支持中文子串。
+# 与 notes 的增删改由触发器保持同步。
+FTS_SQL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+    title, summary, content,
+    tokenize='trigram',
+    content='notes',
+    content_rowid='id'
+);
+CREATE TRIGGER IF NOT EXISTS notes_fts_ai AFTER INSERT ON notes BEGIN
+    INSERT INTO notes_fts(rowid, title, summary, content)
+    VALUES (new.id, new.title, new.summary, new.content);
+END;
+CREATE TRIGGER IF NOT EXISTS notes_fts_ad AFTER DELETE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, title, summary, content)
+    VALUES ('delete', old.id, old.title, old.summary, old.content);
+END;
+CREATE TRIGGER IF NOT EXISTS notes_fts_au AFTER UPDATE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, title, summary, content)
+    VALUES ('delete', old.id, old.title, old.summary, old.content);
+    INSERT INTO notes_fts(rowid, title, summary, content)
+    VALUES (new.id, new.title, new.summary, new.content);
+END;
+"""
+
+
+def _enable_fts(conn: sqlite3.Connection) -> None:
+    """建 FTS5 索引与触发器；老库已有数据时首次回填。FTS5 不可用则静默跳过(搜索退回 LIKE)。"""
+    existed = bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='notes_fts'"
+        ).fetchone()
+    )
+    try:
+        conn.executescript(FTS_SQL)
+    except sqlite3.OperationalError:
+        return
+    if not existed and conn.execute("SELECT 1 FROM notes LIMIT 1").fetchone():
+        conn.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
+
+
+def fts_available(db_path: str | Path) -> bool:
+    """该库是否启用了 FTS5 索引(供搜索层判断是否走全文检索)。"""
+    with connect(db_path) as conn:
+        return bool(
+            conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='notes_fts'"
+            ).fetchone()
+        )
+
+
 def init_db(db_path: str | Path) -> None:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -86,3 +137,5 @@ def init_db(db_path: str | Path) -> None:
                 conn.execute("ALTER TABLE events ADD COLUMN recur TEXT NOT NULL DEFAULT 'none'")
         # 移除早期测试版“图片抓取”遗留的 media 表（功能已下架）
         conn.execute("DROP TABLE IF EXISTS media")
+        # 5) FTS5 全文检索索引(建表/触发器/老库回填；不可用时静默降级)
+        _enable_fts(conn)
