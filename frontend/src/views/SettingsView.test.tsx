@@ -9,6 +9,7 @@ vi.mock("../api/client", () => ({
   api: {
     getSettings: vi.fn(),
     saveSettings: vi.fn(),
+    testProvider: vi.fn(),
   },
 }));
 
@@ -39,6 +40,7 @@ describe("SettingsView", () => {
   beforeEach(() => {
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(MOCK_DEFAULTS);
     vi.mocked(api.saveSettings).mockReset();
+    vi.mocked(api.testProvider).mockReset();
   });
 
   it("默认展示本地规则与隐私说明", async () => {
@@ -127,6 +129,38 @@ describe("SettingsView", () => {
       });
     });
     expect(await screen.findByRole("status")).toBeInTheDocument();
+  });
+
+  it("测试连接：把当前输入发给接口并展示成功", async () => {
+    vi.mocked(api.testProvider).mockResolvedValue({ ok: true, reply: "正常" });
+    render(<SettingsView />);
+    await screen.findByText("本地规则（Mock）");
+
+    fireEvent.click(screen.getByRole("radio", { name: /DeepSeek（深度求索）/i }));
+    fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-ds-typed" } });
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+
+    await waitFor(() => {
+      expect(api.testProvider).toHaveBeenCalledWith({
+        provider: "deepseek",
+        base_url: "https://api.deepseek.com",
+        model: "deepseek-chat",
+        api_key: "sk-ds-typed",
+      });
+    });
+    expect(await screen.findByText(/连接成功/)).toBeInTheDocument();
+  });
+
+  it("测试连接失败时展示原因", async () => {
+    vi.mocked(api.testProvider).mockRejectedValue(new Error("401 Authentication Fails"));
+    render(<SettingsView />);
+    await screen.findByText("本地规则（Mock）");
+
+    fireEvent.click(screen.getByRole("radio", { name: /DeepSeek（深度求索）/i }));
+    fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-bad" } });
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+
+    expect(await screen.findByText(/401 Authentication Fails/)).toBeInTheDocument();
   });
 
   it("加载失败时给出提示", async () => {

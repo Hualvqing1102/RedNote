@@ -213,6 +213,22 @@ def configured_provider_name(cfg: dict[str, Any]) -> str:
     return info["provider"]
 
 
+async def test_connection(cfg: dict[str, Any]) -> str:
+    """发一条极小请求验证模型配置是否可用，返回模型回复片段。
+
+    配置无效(如未填 Key、服务端鉴权失败、地址连不通)时抛 ProviderError，
+    消息可直接展示给用户。注意：cfg 中的 api_key 绝不进入任何返回体。
+    """
+    provider = build_provider(cfg)
+    if isinstance(provider, MockProvider):
+        raise ProviderError("未提供可用的 API Key，无法发起真实请求")
+    out = await provider.complete(
+        "你是连通性测试助手。请只回复两个字：正常",
+        "ping",
+    )
+    return (out or "").strip()
+
+
 def _extract_http_error(resp: httpx.Response, default: str) -> str:
     """从常见错误体里摘出可展示的信息（不打印 Key）。"""
     try:

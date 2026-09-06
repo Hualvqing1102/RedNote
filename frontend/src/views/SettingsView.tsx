@@ -36,6 +36,8 @@ export default function SettingsView() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testNote, setTestNote] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     api
@@ -98,6 +100,28 @@ export default function SettingsView() {
     }
   }
 
+  async function testConnection() {
+    if (provider === "mock") return;
+    setTesting(true);
+    setTestNote(null);
+    setError("");
+    const group = edits[provider as CloudProvider];
+    const body: { provider: string; base_url?: string; model?: string; api_key?: string } = { provider };
+    if (OPENAI_LIKE.includes(provider as CloudProvider) && group.baseUrl.trim()) {
+      body.base_url = group.baseUrl.trim();
+    }
+    if (group.model.trim()) body.model = group.model.trim();
+    if (group.apiKey.trim()) body.api_key = group.apiKey.trim();
+    try {
+      const r = await api.testProvider(body);
+      setTestNote({ ok: true, text: `连接成功${r.reply ? ` · 模型回复：${r.reply}` : ""}` });
+    } catch (e) {
+      setTestNote({ ok: false, text: e instanceof Error ? e.message : "连接失败" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   if (!resp) {
     return <div className="hint">{error || "加载中…"}</div>;
   }
@@ -131,7 +155,10 @@ export default function SettingsView() {
                   name="provider"
                   value={id}
                   checked={provider === id}
-                  onChange={() => setProvider(id)}
+                  onChange={() => {
+                    setProvider(id);
+                    setTestNote(null);
+                  }}
                 />
                 <span className="t">{title}</span>
                 <span className="d">{desc}</span>
@@ -192,6 +219,23 @@ export default function SettingsView() {
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {cur && curView && (
+          <div className="field-test">
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={testConnection}
+              disabled={busy || testing}
+            >
+              {testing ? "测试中…" : "测试连接"}
+            </button>
+            {testNote && (
+              <span className={`test-note ${testNote.ok ? "ok" : "err"}`} role={testNote.ok ? "status" : "alert"}>
+                {testNote.text}
+              </span>
+            )}
           </div>
         )}
 

@@ -6,6 +6,7 @@ import json
 import pytest
 
 from app import settings as store
+from app.services.providers import ProviderError
 
 
 # ---------------------------------------------------------------- 存储层
@@ -178,3 +179,62 @@ def test_put_settings_clear_key(client):
     resp = client.put("/api/settings", json={"openai": {"api_key": ""}})
     assert resp.status_code == 200
     assert resp.json()["settings"]["openai"]["has_key"] is False
+
+
+# ---------------------------------------------------------------- 测试连接
+
+
+def test_settings_test_success_and_no_key_leak(client, monkeypatch):
+    captured: dict = {}
+
+    async def fake(cfg):
+        captured["cfg"] = cfg
+        return "正常"
+
+    monkeypatch.setattr("app.services.providers.test_connection", fake)
+    resp = client.post(
+        "/api/settings/test",
+        json={
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "model": "deepseek-chat",
+            "api_key": "sk-ds-xyz",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["reply"] == "正常"
+    assert captured["cfg"]["provider"] == "deepseek"
+    assert captured["cfg"]["deepseek"]["api_key"] == "sk-ds-xyz"
+    assert "sk-ds-xyz" not in json.dumps(body)
+
+
+def test_settings_test_reports_provider_error(client, monkeypatch):
+    async def fake(cfg):
+        raise ProviderError("401 Authentication Fails")
+
+    monkeypatch.setattr("app.services.providers.test_connection", fake)
+    resp = client.post("/api/settings/test", json={"provider": "qwen", "model": "qwen-plus", "api_key": "bad"})
+    assert resp.status_code == 400
+    assert "401 Authentication Fails" in resp.json()["detail"]
+
+
+def test_settings_test_mock_rejected(client):
+    resp = client.post("/api/settings/test", json={"provider": "mock"})
+    assert resp.status_code == 400
+    assert "真实模型" in resp.json()["detail"]
+
+
+def test_settings_test_falls_back_to_saved_key(client, monkeypatch):
+    captured: dict = {}
+    client.put("/api/settings", json={"provider": "deepseek", "deepseek": {"api_key": "sk-ds-saved"}})
+
+    async def fake(cfg):
+        captured["cfg"] = cfg
+        return "正常"
+
+    monkeypatch.setattr("app.services.providers.test_connection", fake)
+    resp = client.post("/api/settings/test", json={"provider": "deepseek", "model": "deepseek-chat"})
+    assert resp.status_code == 200
+    assert captured["cfg"]["deepseek"]["api_key"] == "sk-ds-saved"

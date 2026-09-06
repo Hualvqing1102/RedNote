@@ -939,6 +939,10 @@ textarea {
 }
 .field input:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: transparent; }
 .key-clear { white-space: nowrap; color: var(--green-deep); }
+.field-test { display: flex; align-items: center; gap: 10px; padding: 2px 24px 6px; flex-wrap: wrap; }
+.test-note { font-size: 12.5px; }
+.test-note.ok { color: var(--green-deep); }
+.test-note.err { color: #a33; }
 .setting-actions { padding: 14px 24px 24px; display: flex; gap: 10px; align-items: center; }
 .success-banner {
   margin: 14px 24px 0; padding: 10px 14px; font-size: 13px;

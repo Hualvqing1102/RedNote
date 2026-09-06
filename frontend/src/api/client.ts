@@ -112,4 +112,12 @@ export const api = {
 
   saveSettings: (patch: SettingsPatch): Promise<SettingsResponse> =>
     request("/api/settings", { method: "PUT", body: JSON.stringify(patch) }),
+
+  testProvider: (cfg: {
+    provider: string;
+    base_url?: string;
+    model?: string;
+    api_key?: string;
+  }): Promise<{ ok: boolean; reply: string }> =>
+    request("/api/settings/test", { method: "POST", body: JSON.stringify(cfg) }),
 };

@@ -106,6 +106,14 @@ class SettingsIn(BaseModel):
     qwen: ProviderGroup | None = None
 
 
+class SettingsTestIn(BaseModel):
+    """测试连接用的临时配置(可含用户刚输入、尚未保存的 Key)。"""
+    provider: str
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+
+
 def create_app(db_path: str | None = None, settings_path: str | None = None) -> FastAPI:
     db_path = db_path or str(config.db_path())
     settings_path = settings_path or str(settings_store.settings_path())
@@ -151,6 +159,33 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         settings_store.save(cfg, _settings_path())
         return {"settings": settings_store.public_view(cfg), "active": settings_store.active_provider(cfg)}
+
+    @app.post("/api/settings/test")
+    async def test_settings(payload: SettingsTestIn) -> dict[str, Any]:
+        """用(临时输入的或已保存的)配置发一条极小请求，验证模型连通性。"""
+        from app.services import providers
+
+        provider = payload.provider
+        if provider == "mock" or provider not in settings_store.PROVIDERS:
+            raise HTTPException(status_code=400, detail="请先选择一个真实模型（如 DeepSeek / 通义千问）再测试")
+        group: dict[str, Any] = {}
+        for key in ("base_url", "model", "api_key"):
+            value = getattr(payload, key)
+            if value is not None and str(value).strip():
+                group[key] = str(value).strip()
+        # 未显式填写的字段回落到已保存配置(如之前存过的 Key)，便于测“已存配置”
+        stored = (settings_store.load(_settings_path()) or {}).get(provider) or {}
+        for key in ("base_url", "model", "api_key"):
+            if key not in group and stored.get(key):
+                group[key] = stored[key]
+        cfg: dict[str, Any] = {"provider": provider, provider: group}
+        try:
+            reply = await providers.test_connection(cfg)
+        except providers.ProviderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - 兜底，保证有可展示的失败原因
+            raise HTTPException(status_code=400, detail=f"测试失败：{exc}") from exc
+        return {"ok": True, "reply": reply[:80]}
 
     # ------------------------------------------------ 采集
 
