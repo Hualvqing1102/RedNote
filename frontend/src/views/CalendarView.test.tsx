@@ -24,6 +24,7 @@ function makeEvent(over: Partial<EventItem> = {}): EventItem {
     title: "周会",
     kind: "schedule",
     color: "blue",
+    recur: "none",
     start_ts: startOfToday() + 3600,
     end_ts: startOfToday() + 7200,
     all_day: false,
@@ -66,6 +67,22 @@ describe("CalendarView", () => {
     await waitFor(() => {
       expect(api.createEvent).toHaveBeenCalledWith(
         expect.objectContaining({ title: "交周报", kind: "todo", color: "green", done: false })
+      );
+    });
+  });
+
+  it("点击“设为每周待办”按钮后保存会带上每周重复标记", async () => {
+    render(<CalendarView />);
+    await screen.findByText("周会");
+
+    fireEvent.click(screen.getByRole("button", { name: "＋ 新建" }));
+    fireEvent.click(screen.getByRole("button", { name: "设为每周待办" }));
+    fireEvent.change(screen.getByLabelText("标题"), { target: { value: "每日英语" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加到当日" }));
+
+    await waitFor(() => {
+      expect(api.createEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "每日英语", recur: "weekly" })
       );
     });
   });

@@ -72,6 +72,7 @@ class EventIn(BaseModel):
     title: str
     kind: str = "todo"
     color: str = "green"
+    recur: str = "none"
     start_ts: int
     end_ts: int | None = None
     all_day: bool = False
@@ -83,6 +84,7 @@ class EventPatch(BaseModel):
     title: str | None = None
     kind: str | None = None
     color: str | None = None
+    recur: str | None = None
     start_ts: int | None = None
     end_ts: int | None = None
     all_day: bool | None = None

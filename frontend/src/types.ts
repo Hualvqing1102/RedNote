@@ -19,12 +19,14 @@ export interface Folder {
 
 export type EventKind = "schedule" | "todo";
 export type EventColor = "green" | "blue" | "yellow" | "pink" | "purple";
+export type EventRecur = "none" | "weekly";
 
 export interface EventItem {
   id: number;
   title: string;
   kind: EventKind;
   color: EventColor;
+  recur: EventRecur;
   start_ts: number;
   end_ts: number | null;
   all_day: boolean;
@@ -38,6 +40,7 @@ export interface EventInput {
   title: string;
   kind: EventKind;
   color?: EventColor;
+  recur?: EventRecur;
   start_ts: number;
   end_ts?: number | null;
   all_day?: boolean;

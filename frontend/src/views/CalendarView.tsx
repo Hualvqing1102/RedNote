@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import type { EventColor, EventInput, EventItem, EventKind } from "../types";
+import type { EventColor, EventInput, EventItem, EventKind, EventRecur } from "../types";
 
 const WEEK_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 export const EVENT_COLORS: { id: EventColor; label: string }[] = [
@@ -70,6 +70,7 @@ interface FormState {
   title: string;
   kind: EventKind;
   color: EventColor;
+  recur: EventRecur;
   allDay: boolean;
   startTime: string;
   endTime: string;
@@ -78,7 +79,7 @@ interface FormState {
 type CalMode = "month" | "week";
 
 function blankForm(): FormState {
-  return { title: "", kind: "schedule", color: "green", allDay: false, startTime: "09:00", endTime: "10:00", done: false };
+  return { title: "", kind: "schedule", color: "green", recur: "none", allDay: false, startTime: "09:00", endTime: "10:00", done: false };
 }
 function formFromEvent(ev: EventItem): FormState {
   const d = tsToDate(ev.start_ts);
@@ -86,6 +87,7 @@ function formFromEvent(ev: EventItem): FormState {
     title: ev.title,
     kind: ev.kind,
     color: ev.color,
+    recur: ev.recur,
     allDay: ev.all_day,
     startTime: timeOf(d),
     endTime: ev.end_ts ? timeOf(tsToDate(ev.end_ts)) : "",
@@ -109,6 +111,7 @@ function formToInput(f: FormState, day: Date): EventInput {
     title: f.title.trim(),
     kind: f.kind,
     color: f.color,
+    recur: f.recur,
     start_ts: start,
     end_ts: f.kind === "todo" || f.allDay ? null : end ?? null,
     all_day: f.kind === "todo" || f.allDay,
@@ -438,6 +441,14 @@ export default function CalendarView() {
                       onClick={() => setForm({ ...form, color: c.id })} />
                   ))}
                 </div>
+              </div>
+
+              <div className="field-row"><span>每周</span>
+                <button type="button"
+                  className={`btn btn-sm${form.recur === "weekly" ? " btn-toggle-on" : ""}`}
+                  onClick={() => setForm({ ...form, recur: form.recur === "weekly" ? "none" : "weekly" })}>
+                  {form.recur === "weekly" ? "每周重复 ✓" : "设为每周待办"}
+                </button>
               </div>
 
               {form.kind === "schedule" && (

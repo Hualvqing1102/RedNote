@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS events (
     title      TEXT NOT NULL,
     kind       TEXT NOT NULL DEFAULT 'todo',      -- 'schedule' 日程 | 'todo' 待办
     color      TEXT NOT NULL DEFAULT 'green',     -- green/blue/yellow/pink/purple
+    recur      TEXT NOT NULL DEFAULT 'none',      -- 'none' 仅一次 | 'weekly' 每周重复
     start_ts   INTEGER NOT NULL,                  -- 秒级时间戳(本地)
     end_ts     INTEGER,                           -- 日程结束(可为空)
     all_day    INTEGER NOT NULL DEFAULT 0,
@@ -81,5 +82,7 @@ def init_db(db_path: str | Path) -> None:
             ev_cols = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
             if "color" not in ev_cols:
                 conn.execute("ALTER TABLE events ADD COLUMN color TEXT NOT NULL DEFAULT 'green'")
+            if "recur" not in ev_cols:
+                conn.execute("ALTER TABLE events ADD COLUMN recur TEXT NOT NULL DEFAULT 'none'")
         # 移除早期测试版“图片抓取”遗留的 media 表（功能已下架）
         conn.execute("DROP TABLE IF EXISTS media")
