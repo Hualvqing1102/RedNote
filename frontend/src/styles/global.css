@@ -1656,3 +1656,15 @@ a.btn { text-decoration: none; }
 @media (max-width: 1000px) {
   .cal-drawer { width: min(94vw, 350px); }
 }
+
+/* 强制：日历占满整行，抽屉贴右占据右空位并顶端对齐 */
+.calendar-wrap { max-width: none; }
+.cal-layout { display: block; width: 100%; min-width: 0; }
+.cal-main { width: 100%; min-width: 0; }
+.cal-month { width: 100%; }
+.cal-week { width: 100%; }
+.cal-drawer {
+  position: absolute !important; right: 0; top: 0;
+  width: 340px; max-height: calc(100vh - 100px);
+  margin: 0; z-index: 30;
+}
