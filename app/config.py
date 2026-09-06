@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -19,3 +20,14 @@ def data_dir() -> Path:
 
 def db_path() -> Path:
     return data_dir() / "rednote.db"
+
+
+def frontend_dist_dir() -> Path | None:
+    """前端构建产物目录：打包后的 exe 从资源区取，源码运行取 frontend/dist。"""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        bundled = Path(meipass) / "frontend_dist"
+        if bundled.is_dir():
+            return bundled
+    dist = PROJECT_ROOT / "frontend" / "dist"
+    return dist if dist.is_dir() else None

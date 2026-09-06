@@ -1,6 +1,10 @@
 """REST API 集成测试：走完整请求链路(不联网；Agent 为模拟)。"""
 from __future__ import annotations
 
+import pytest
+
+from app.config import frontend_dist_dir
+
 NOTE_PAYLOAD = {
     "title": "API 集成测试笔记",
     "summary": "用于验证接口的笔记",
@@ -68,3 +72,17 @@ def test_agent_ask_missing_note(client):
 def test_collect_bad_url_message(client):
     resp = client.post("/api/collect", json={"url": "not a url"})
     assert resp.status_code == 400
+
+
+def test_spa_index_and_fallback(client):
+    if frontend_dist_dir() is None:
+        pytest.skip("前端未构建，跳过静态托管测试")
+    index = client.get("/")
+    assert index.status_code == 200
+    assert "root" in index.text or "index" in index.text.lower()
+    # 前端路由路径也回退到 index.html，而不是 404
+    fallback = client.get("/some/client/route")
+    assert fallback.status_code == 200
+    assert fallback.text == index.text
+    # API 仍正常，不被 SPA 回退吞掉
+    assert client.get("/api/notes").status_code == 200

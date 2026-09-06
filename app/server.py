@@ -6,11 +6,13 @@ from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import config
 from app import settings as settings_store
+from app.config import frontend_dist_dir
 from app.db import init_db
 from app.services import agent as agent_service
 from app.services import collect as collect_service
@@ -369,6 +371,27 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
             media_type="application/vnd.sqlite3",
             headers=_attachment("rednote-backup.db"),
         )
+
+    # ------------------------------------------------ 前端静态托管(生产/桌面)
+
+    dist = frontend_dist_dir()
+    if dist is not None:
+        assets = dist / "assets"
+        if assets.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def spa(full_path: str) -> Response:
+            # SPA 回退：存在的文件直接给，其余交给 index.html 处理前端路由
+            if full_path:
+                candidate = (dist / full_path).resolve()
+                root = dist.resolve()
+                if candidate.is_file() and candidate.is_relative_to(root):
+                    return FileResponse(candidate)
+            index = dist / "index.html"
+            if index.is_file():
+                return FileResponse(index)
+            return Response("前端未构建：请先在 frontend/ 目录执行 npm run build", status_code=404)
 
     return app
 
