@@ -92,7 +92,7 @@ export interface ExplainResult {
   explanation: string;
 }
 
-export type ProviderName = "mock" | "claude" | "openai";
+export type ProviderName = "mock" | "claude" | "openai" | "deepseek" | "qwen";
 
 export interface ProviderGroupView {
   model?: string;
@@ -104,6 +104,8 @@ export interface SettingsView {
   provider: ProviderName;
   claude: ProviderGroupView;
   openai: ProviderGroupView;
+  deepseek: ProviderGroupView;
+  qwen: ProviderGroupView;
 }
 
 export interface SettingsActive {
@@ -120,4 +122,6 @@ export interface SettingsPatch {
   provider?: ProviderName;
   claude?: { model?: string; api_key?: string };
   openai?: { base_url?: string; model?: string; api_key?: string };
+  deepseek?: { base_url?: string; model?: string; api_key?: string };
+  qwen?: { base_url?: string; model?: string; api_key?: string };
 }

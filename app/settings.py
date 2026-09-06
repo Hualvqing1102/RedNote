@@ -15,7 +15,10 @@ from typing import Any
 
 from app import config
 
-PROVIDERS = ("mock", "claude", "openai")
+PROVIDERS = ("mock", "claude", "openai", "deepseek", "qwen")
+
+# 需要 base_url+model 的真实 Provider（OpenAI 兼容协议）
+OPENAI_LIKE = ("openai", "deepseek", "qwen")
 
 # 仅在返回给前端的公开视图里展示的键
 SECRET_KEYS = {"api_key"}
@@ -27,9 +30,21 @@ DEFAULTS: dict[str, Any] = {
         "api_key": "",
     },
     "openai": {
-        # OpenAI 兼容端点：覆盖 DeepSeek 云、Ollama、LM Studio、本地部署模型
-        "base_url": "https://api.deepseek.com/v1",
+        # 通用 OpenAI 兼容端点：Ollama、LM Studio、本地部署模型等
+        "base_url": "http://127.0.0.1:11434/v1",
+        "model": "qwen2.5",
+        "api_key": "",
+    },
+    "deepseek": {
+        # DeepSeek 官方 OpenAI 兼容接口
+        "base_url": "https://api.deepseek.com",
         "model": "deepseek-chat",
+        "api_key": "",
+    },
+    "qwen": {
+        # 通义千问：阿里云百炼 DashScope 的 OpenAI 兼容模式
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-plus",
         "api_key": "",
     },
 }
@@ -90,7 +105,7 @@ def validate(cfg: dict[str, Any]) -> None:
     if provider == "mock":
         return
     group = cfg.get(provider) or {}
-    if provider == "openai":
+    if provider in OPENAI_LIKE:
         base_url = str(group.get("base_url") or "").strip()
         model = str(group.get("model") or "").strip()
         if not base_url or not base_url.startswith(("http://", "https://")):
@@ -112,7 +127,9 @@ def apply_patch(patch: dict[str, Any], path: str | Path | None = None) -> dict[s
 def public_view(cfg: dict[str, Any]) -> dict[str, Any]:
     """公开视图：剔除所有密钥，仅暴露「是否已配置 Key」。"""
     out: dict[str, Any] = {"provider": cfg.get("provider", "mock")}
-    for group_name in ("claude", "openai"):
+    for group_name in PROVIDERS:
+        if group_name == "mock":
+            continue
         group = cfg.get(group_name) or {}
         view: dict[str, Any] = {"has_key": bool(str(group.get("api_key") or "").strip())}
         for key, value in group.items():

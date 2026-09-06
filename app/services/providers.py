@@ -190,7 +190,8 @@ def build_provider(cfg: dict[str, Any]) -> LLMProvider:
     group = cfg.get(provider) or {}
     if not str(group.get("api_key") or "").strip():
         return MockProvider()
-    if provider == "openai":
+    if provider in ("openai", "deepseek", "qwen"):
+        # DeepSeek / 通义千问(Qwen) / Ollama 等均走 OpenAI 兼容协议
         return OpenAICompatibleProvider(
             base_url=str(group["base_url"]),
             model=str(group["model"]),

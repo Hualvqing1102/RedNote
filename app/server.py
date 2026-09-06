@@ -102,6 +102,8 @@ class SettingsIn(BaseModel):
     provider: str | None = None
     claude: ProviderGroup | None = None
     openai: ProviderGroup | None = None
+    deepseek: ProviderGroup | None = None
+    qwen: ProviderGroup | None = None
 
 
 def create_app(db_path: str | None = None, settings_path: str | None = None) -> FastAPI:

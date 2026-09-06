@@ -34,6 +34,8 @@ const ENGINE: SettingsResponse = {
     provider: "mock",
     claude: { model: "m", has_key: false },
     openai: { base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_key: false },
+    deepseek: { base_url: "https://api.deepseek.com", model: "deepseek-chat", has_key: false },
+    qwen: { base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus", has_key: false },
   },
   active: { provider: "mock", available: true },
 };

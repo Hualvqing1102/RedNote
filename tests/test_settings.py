@@ -15,6 +15,12 @@ def test_defaults_when_no_file(tmp_path):
     cfg = store.load(tmp_path / "nope.json")
     assert cfg["provider"] == "mock"
     assert store.public_view(cfg)["claude"]["has_key"] is False
+    # 国内模型开箱即用：默认带上官方 base_url 与模型名
+    view = store.public_view(cfg)
+    assert view["deepseek"]["base_url"] == "https://api.deepseek.com"
+    assert view["deepseek"]["model"] == "deepseek-chat"
+    assert view["qwen"]["base_url"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert view["qwen"]["model"] == "qwen-plus"
 
 
 def test_save_load_roundtrip(tmp_path):
@@ -70,6 +76,35 @@ def test_openai_requires_base_url_and_model(tmp_path):
         store.apply_patch({"provider": "openai", "openai": {"base_url": "https://x", "model": ""}}, path)
 
 
+def test_deepseek_and_qwen_validate_like_openai(tmp_path):
+    path = tmp_path / "s.json"
+    # 合法：默认配置自带官方 base_url 与模型名
+    merged = store.apply_patch({"provider": "deepseek", "deepseek": {"api_key": "sk-ds"}}, path)
+    assert merged["deepseek"]["base_url"] == "https://api.deepseek.com"
+    merged = store.apply_patch({"provider": "qwen", "qwen": {"api_key": "sk-qw"}}, path)
+    assert merged["qwen"]["model"] == "qwen-plus"
+    # 非法：清空 base_url 或 model 应报错
+    with pytest.raises(ValueError):
+        store.apply_patch({"provider": "deepseek", "deepseek": {"base_url": ""}}, path)
+    with pytest.raises(ValueError):
+        store.apply_patch({"provider": "qwen", "qwen": {"model": ""}}, path)
+
+
+def test_public_view_lists_deepseek_and_qwen_without_key(tmp_path):
+    path = tmp_path / "settings.json"
+    cfg = store.load(path)
+    cfg["deepseek"]["api_key"] = "sk-ds-secret"
+    cfg["qwen"]["api_key"] = "sk-qw-secret"
+    store.save(cfg, path)
+
+    view = store.public_view(store.load(path))
+    blob = json.dumps(view, ensure_ascii=False)
+    assert "sk-ds-secret" not in blob and "sk-qw-secret" not in blob
+    assert view["deepseek"]["has_key"] is True
+    assert view["qwen"]["has_key"] is True
+    assert store.active_provider(store.load(path))["provider"] == "mock"  # 未选中不生效
+
+
 def test_active_provider():
     cfg = {"provider": "mock"}
     assert store.active_provider(cfg)["available"] is True
@@ -91,8 +126,32 @@ def test_get_settings_defaults(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["settings"]["provider"] == "mock"
-    assert data["settings"]["openai"]["model"] == "deepseek-chat"
+    assert data["settings"]["openai"]["model"] == "qwen2.5"
+    assert data["settings"]["deepseek"]["base_url"] == "https://api.deepseek.com"
+    assert data["settings"]["qwen"]["model"] == "qwen-plus"
     assert data["active"]["available"] is True
+
+
+def test_put_settings_deepseek_and_qwen(client):
+    resp = client.put(
+        "/api/settings",
+        json={"provider": "deepseek", "deepseek": {"api_key": "sk-ds-xyz"}},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["settings"]["provider"] == "deepseek"
+    assert body["settings"]["deepseek"]["has_key"] is True
+    assert "sk-ds-xyz" not in json.dumps(body)
+
+    resp = client.put(
+        "/api/settings",
+        json={"provider": "qwen", "qwen": {"api_key": "sk-qw-abc", "model": "qwen-max"}},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["settings"]["provider"] == "qwen"
+    assert body["settings"]["qwen"]["model"] == "qwen-max"
+    assert body["settings"]["qwen"]["has_key"] is True
 
 
 def test_put_settings_saves_and_masks_key(client):

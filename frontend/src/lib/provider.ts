@@ -1,4 +1,4 @@
-import type { SettingsResponse } from "../types";
+import type { ProviderGroupView, ProviderName, SettingsResponse } from "../types";
 
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"];
 
@@ -12,14 +12,38 @@ export function isLocalBaseUrl(baseUrl?: string): boolean {
   }
 }
 
+/** 取某个真实 Provider 的公开配置组(claude/openai/deepseek/qwen)。 */
+function groupOf(resp: SettingsResponse, provider: ProviderName): ProviderGroupView | undefined {
+  switch (provider) {
+    case "claude":
+      return resp.settings.claude;
+    case "openai":
+      return resp.settings.openai;
+    case "deepseek":
+      return resp.settings.deepseek;
+    case "qwen":
+      return resp.settings.qwen;
+    default:
+      return undefined;
+  }
+}
+
 /** 数据是否会离开本机(发送到云端 API)。 */
 export function sendsToCloud(resp: SettingsResponse): boolean {
   const { provider, available } = resp.active;
   if (provider === "mock") return false;
   if (!available) return false; // 未填 Key，实际走本地规则
   if (provider === "claude") return true;
-  return !isLocalBaseUrl(resp.settings.openai.base_url);
+  return !isLocalBaseUrl(groupOf(resp, provider)?.base_url);
 }
+
+const CLOUD_LABEL: Record<ProviderName, string> = {
+  mock: "本地规则",
+  claude: "Claude",
+  openai: "OpenAI 兼容服务",
+  deepseek: "DeepSeek",
+  qwen: "通义千问 Qwen",
+};
 
 /** 一句话说明当前「总结/追问」由什么引擎处理(用于 UI 明示，呼应隐私承诺)。 */
 export function describeEngine(resp: SettingsResponse): string {
@@ -30,23 +54,29 @@ export function describeEngine(resp: SettingsResponse): string {
   if (provider === "claude") {
     return "由 Claude（云端 API）生成：正文会发送到 Anthropic 处理";
   }
-  const base = resp.settings.openai.base_url || "";
+  const base = groupOf(resp, provider)?.base_url || "";
   if (isLocalBaseUrl(base)) {
     return `由本地模型服务生成（${base}，数据不离开本机）`;
   }
-  return `由云端 OpenAI 兼容服务生成（${base}）：正文会发送到该服务处理`;
+  return `由${CLOUD_LABEL[provider]}（云端 API）生成（${base}）：正文会发送到该服务处理`;
 }
+
+const SHORT_LABEL: Record<Exclude<ProviderName, "mock">, string> = {
+  claude: "Claude",
+  openai: "OpenAI 兼容",
+  deepseek: "DeepSeek",
+  qwen: "通义千问 Qwen",
+};
 
 /** 引擎名(用于设置页当前生效标签)。 */
 export function providerLabel(resp: SettingsResponse): string {
   const { provider, available } = resp.active;
   if (provider === "mock") return "本地规则（Mock）";
-  if (provider === "claude") return available ? "Claude 云端" : "Claude（未填 Key）";
   if (provider === "openai") {
     if (!available) return "OpenAI 兼容（未填 Key）";
     return isLocalBaseUrl(resp.settings.openai.base_url)
       ? "本地模型（OpenAI 兼容）"
       : "云端 OpenAI 兼容";
   }
-  return provider;
+  return available ? `${SHORT_LABEL[provider]} 云端` : `${SHORT_LABEL[provider]}（未填 Key）`;
 }

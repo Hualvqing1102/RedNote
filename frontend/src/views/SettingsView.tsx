@@ -3,14 +3,36 @@ import { api } from "../api/client";
 import { describeEngine, providerLabel, sendsToCloud } from "../lib/provider";
 import type { ProviderName, SettingsResponse } from "../types";
 
+type CloudProvider = "claude" | "openai" | "deepseek" | "qwen";
+const OPENAI_LIKE: CloudProvider[] = ["openai", "deepseek", "qwen"];
+
+interface Editable {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+}
+
+function emptyEdits(): Record<CloudProvider, Editable> {
+  return {
+    claude: { baseUrl: "", model: "", apiKey: "" },
+    openai: { baseUrl: "", model: "", apiKey: "" },
+    deepseek: { baseUrl: "", model: "", apiKey: "" },
+    qwen: { baseUrl: "", model: "", apiKey: "" },
+  };
+}
+
+const CARDS: { id: ProviderName; title: string; desc: string }[] = [
+  { id: "mock", title: "本地规则（默认）", desc: "不联网，用于体验全流程" },
+  { id: "deepseek", title: "DeepSeek（深度求索）", desc: "国产云端 API · OpenAI 兼容" },
+  { id: "qwen", title: "通义千问 Qwen（阿里云百炼）", desc: "国产云端 API · OpenAI 兼容" },
+  { id: "openai", title: "OpenAI 兼容端点", desc: "Ollama / LM Studio / 本地模型" },
+  { id: "claude", title: "Claude（Anthropic）", desc: "云端 API" },
+];
+
 export default function SettingsView() {
   const [resp, setResp] = useState<SettingsResponse | null>(null);
   const [provider, setProvider] = useState<ProviderName>("mock");
-  const [claudeModel, setClaudeModel] = useState("");
-  const [claudeKey, setClaudeKey] = useState("");
-  const [openaiBase, setOpenaiBase] = useState("");
-  const [openaiModel, setOpenaiModel] = useState("");
-  const [openaiKey, setOpenaiKey] = useState("");
+  const [edits, setEdits] = useState<Record<CloudProvider, Editable>>(emptyEdits());
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -26,32 +48,33 @@ export default function SettingsView() {
   function applyResponse(r: SettingsResponse) {
     setResp(r);
     setProvider(r.settings.provider);
-    setClaudeModel(r.settings.claude.model || "");
-    setClaudeKey("");
-    setOpenaiBase(r.settings.openai.base_url || "");
-    setOpenaiModel(r.settings.openai.model || "");
-    setOpenaiKey("");
+    setEdits({
+      claude: { baseUrl: "", model: r.settings.claude.model || "", apiKey: "" },
+      openai: { baseUrl: r.settings.openai.base_url || "", model: r.settings.openai.model || "", apiKey: "" },
+      deepseek: { baseUrl: r.settings.deepseek.base_url || "", model: r.settings.deepseek.model || "", apiKey: "" },
+      qwen: { baseUrl: r.settings.qwen.base_url || "", model: r.settings.qwen.model || "", apiKey: "" },
+    });
+  }
+
+  function setField(group: CloudProvider, key: keyof Editable, value: string) {
+    setEdits((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }));
   }
 
   async function save() {
     setBusy(true);
     setError("");
     setSaved(false);
-    const patch: Parameters<typeof api.saveSettings>[0] = { provider };
-    if (provider === "claude") {
-      const group: { model?: string; api_key?: string } = {};
-      if (claudeModel.trim()) group.model = claudeModel.trim();
-      if (claudeKey.trim()) group.api_key = claudeKey.trim();
-      if (Object.keys(group).length > 0) patch.claude = group;
-    } else if (provider === "openai") {
-      const group: { base_url?: string; model?: string; api_key?: string } = {};
-      if (openaiBase.trim()) group.base_url = openaiBase.trim();
-      if (openaiModel.trim()) group.model = openaiModel.trim();
-      if (openaiKey.trim()) group.api_key = openaiKey.trim();
-      if (Object.keys(group).length > 0) patch.openai = group;
+    const patch: Record<string, unknown> = { provider };
+    if (provider !== "mock") {
+      const group = edits[provider as CloudProvider];
+      const g: { base_url?: string; model?: string; api_key?: string } = {};
+      if (group.baseUrl.trim()) g.base_url = group.baseUrl.trim();
+      if (group.model.trim()) g.model = group.model.trim();
+      if (group.apiKey.trim()) g.api_key = group.apiKey.trim();
+      if (Object.keys(g).length > 0) patch[provider] = g;
     }
     try {
-      const r = await api.saveSettings(patch);
+      const r = await api.saveSettings(patch as Parameters<typeof api.saveSettings>[0]);
       applyResponse(r);
       setSaved(true);
     } catch (e) {
@@ -61,7 +84,7 @@ export default function SettingsView() {
     }
   }
 
-  async function clearKey(group: "claude" | "openai") {
+  async function clearKey(group: CloudProvider) {
     setBusy(true);
     setError("");
     try {
@@ -80,6 +103,8 @@ export default function SettingsView() {
   }
 
   const cloud = sendsToCloud(resp);
+  const cur = provider === "mock" ? null : edits[provider as CloudProvider];
+  const curView = provider === "mock" ? null : resp.settings[provider as CloudProvider];
 
   return (
     <div className="settings-wrap">
@@ -99,20 +124,14 @@ export default function SettingsView() {
         <div className="setting-block">
           <div className="field-label">Provider</div>
           <div className="radio-row">
-            {(
-              [
-                ["mock", "本地规则（默认）", "不联网，用于体验全流程"],
-                ["claude", "Claude（Anthropic）", "云端 API"],
-                ["openai", "OpenAI 兼容端点", "DeepSeek 云 / Ollama / LM Studio / 本地模型"],
-              ] as const
-            ).map(([value, title, desc]) => (
-              <label className={`radio-card${provider === value ? " active" : ""}`} key={value}>
+            {CARDS.map(({ id, title, desc }) => (
+              <label className={`radio-card${provider === id ? " active" : ""}`} key={id}>
                 <input
                   type="radio"
                   name="provider"
-                  value={value}
-                  checked={provider === value}
-                  onChange={() => setProvider(value)}
+                  value={id}
+                  checked={provider === id}
+                  onChange={() => setProvider(id)}
                 />
                 <span className="t">{title}</span>
                 <span className="d">{desc}</span>
@@ -121,95 +140,58 @@ export default function SettingsView() {
           </div>
         </div>
 
-        {provider !== "mock" && (
+        {cur && curView && (
           <div className="setting-block fields">
-            {provider === "claude" && (
-              <>
-                <div className="field">
-                  <label htmlFor="claude-model">模型</label>
-                  <input
-                    id="claude-model"
-                    type="text"
-                    value={claudeModel}
-                    onChange={(e) => setClaudeModel(e.target.value)}
-                    placeholder="claude-3-5-sonnet-20241022"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="claude-key">API Key</label>
-                  <input
-                    id="claude-key"
-                    type="password"
-                    value={claudeKey}
-                    onChange={(e) => setClaudeKey(e.target.value)}
-                    placeholder={
-                      resp.settings.claude.has_key
-                        ? "已配置（输入新 Key 可替换；留空保持不变）"
-                        : "sk-ant-…"
-                    }
-                    autoComplete="off"
-                  />
-                  {resp.settings.claude.has_key && (
-                    <button
-                      className="btn btn-ghost btn-sm key-clear"
-                      onClick={() => clearKey("claude")}
-                      disabled={busy}
-                    >
-                      移除已存 Key
-                    </button>
-                  )}
-                </div>
-              </>
+            {OPENAI_LIKE.includes(provider as CloudProvider) && (
+              <div className="field">
+                <label htmlFor={`${provider}-base`}>Base URL</label>
+                <input
+                  id={`${provider}-base`}
+                  type="text"
+                  value={cur.baseUrl}
+                  onChange={(e) => setField(provider as CloudProvider, "baseUrl", e.target.value)}
+                  placeholder="https://api.deepseek.com 或 http://127.0.0.1:11434/v1"
+                />
+              </div>
             )}
-
-            {provider === "openai" && (
-              <>
-                <div className="field">
-                  <label htmlFor="openai-base">Base URL</label>
-                  <input
-                    id="openai-base"
-                    type="text"
-                    value={openaiBase}
-                    onChange={(e) => setOpenaiBase(e.target.value)}
-                    placeholder="https://api.deepseek.com/v1 或 http://127.0.0.1:11434/v1"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="openai-model">模型名</label>
-                  <input
-                    id="openai-model"
-                    type="text"
-                    value={openaiModel}
-                    onChange={(e) => setOpenaiModel(e.target.value)}
-                    placeholder="deepseek-chat / qwen2.5 / …"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="openai-key">API Key</label>
-                  <input
-                    id="openai-key"
-                    type="password"
-                    value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
-                    placeholder={
-                      resp.settings.openai.has_key
-                        ? "已配置（输入新 Key 可替换；留空保持不变）"
-                        : "本地 Ollama 可留空"
-                    }
-                    autoComplete="off"
-                  />
-                  {resp.settings.openai.has_key && (
-                    <button
-                      className="btn btn-ghost btn-sm key-clear"
-                      onClick={() => clearKey("openai")}
-                      disabled={busy}
-                    >
-                      移除已存 Key
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
+            <div className="field">
+              <label htmlFor={`${provider}-model`}>
+                {provider === "claude" ? "模型" : "模型名"}
+              </label>
+              <input
+                id={`${provider}-model`}
+                type="text"
+                value={cur.model}
+                onChange={(e) => setField(provider as CloudProvider, "model", e.target.value)}
+                placeholder={curView.model ? curView.model : "deepseek-chat / qwen-plus / …"}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor={`${provider}-key`}>API Key</label>
+              <input
+                id={`${provider}-key`}
+                type="password"
+                value={cur.apiKey}
+                onChange={(e) => setField(provider as CloudProvider, "apiKey", e.target.value)}
+                placeholder={
+                  curView.has_key
+                    ? "已配置（输入新 Key 可替换；留空保持不变）"
+                    : provider === "openai"
+                      ? "本地 Ollama 可留空"
+                      : "粘贴你的 API Key"
+                }
+                autoComplete="off"
+              />
+              {curView.has_key && (
+                <button
+                  className="btn btn-ghost btn-sm key-clear"
+                  onClick={() => clearKey(provider as CloudProvider)}
+                  disabled={busy}
+                >
+                  移除已存 Key
+                </button>
+              )}
+            </div>
           </div>
         )}
 

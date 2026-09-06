@@ -141,6 +141,14 @@ def test_build_real_when_key_present():
     claude = {"provider": "claude", "claude": {"model": "m", "api_key": "sk"}}
     assert isinstance(build_provider(claude), ClaudeProvider)
 
+    deepseek = {"provider": "deepseek", "deepseek": {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "api_key": "sk"}}
+    assert isinstance(build_provider(deepseek), OpenAICompatibleProvider)
+    assert configured_provider_name(deepseek) == "deepseek"
+
+    qwen = {"provider": "qwen", "qwen": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "api_key": "sk"}}
+    assert isinstance(build_provider(qwen), OpenAICompatibleProvider)
+    assert configured_provider_name(qwen) == "qwen"
+
 
 # ---------------------------------------------------------------- agent 层集成
 
