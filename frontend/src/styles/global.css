@@ -1645,3 +1645,14 @@ a.btn { text-decoration: none; }
 .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; }
 .swatch.active { border-color: var(--ink); }
 .drawer-actions { display: flex; gap: 8px; align-items: center; }
+
+/* 抽屉悬浮在右侧，日历铺满整行，消除右侧空白 */
+.calendar-wrap { position: relative; }
+.cal-layout { display: block; }
+.cal-drawer {
+  position: absolute !important; top: 6px; right: 0;
+  width: 350px; max-height: calc(100vh - 120px); z-index: 30;
+}
+@media (max-width: 1000px) {
+  .cal-drawer { width: min(94vw, 350px); }
+}
