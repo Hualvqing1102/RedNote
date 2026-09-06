@@ -48,6 +48,14 @@ class AskIn(BaseModel):
     question: str
 
 
+class SegmentIn(BaseModel):
+    """阅读页选中段落动作：explain 解释 / translate 翻译 / ask 追问。"""
+    note_id: int
+    text: str
+    action: str
+    question: str = ""
+
+
 class NoteIn(BaseModel):
     title: str = ""
     summary: str = ""
@@ -267,6 +275,25 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
             answer = await agent_service.ask(
                 note, payload.question, provider=_current_provider()
             )
+        except agent_service.AgentError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return {"answer": answer}
+
+    @app.post("/api/agent/segment")
+    async def segment(payload: SegmentIn) -> dict[str, Any]:
+        note = notes_service.get_note(_path(), payload.note_id)
+        if not note:
+            raise HTTPException(status_code=404, detail="笔记不存在")
+        try:
+            answer = await agent_service.segment(
+                note,
+                payload.text,
+                payload.action,
+                question=payload.question,
+                provider=_current_provider(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except agent_service.AgentError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {"answer": answer}

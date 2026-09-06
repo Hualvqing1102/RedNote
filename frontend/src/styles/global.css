@@ -1217,6 +1217,39 @@ a.btn { text-decoration: none; }
   border-top: 1px dashed var(--line);
 }
 
+/* ---------- 阅读页：选中段落 Agent 操作 ---------- */
+.seg-pop {
+  position: fixed; z-index: 70;
+  width: min(560px, 92vw);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px;
+}
+.seg-head { display: flex; align-items: center; gap: 8px; }
+.seg-head .t { font-size: 12px; color: var(--muted); flex: 1; }
+.seg-head .x { font-size: 18px; color: var(--muted); padding: 0 6px; border-radius: 6px; }
+.seg-head .x:hover { color: var(--ink); background: rgba(0,0,0,0.05); }
+.seg-src {
+  margin: 8px 0; padding: 8px 10px; background: #f7f7f1; border-radius: 8px;
+  font-size: 12.5px; color: var(--ink); line-height: 1.6;
+  max-height: 110px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+}
+.seg-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg-btns button {
+  padding: 7px 14px; font-size: 13px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--surface);
+}
+.seg-btns button:hover { border-color: var(--green); color: var(--green-deep); background: rgba(46,107,76,0.05); }
+.seg-ask { display: flex; gap: 8px; }
+.seg-ask input {
+  flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 10px; font-size: 13px;
+}
+.seg-busy { font-size: 12.5px; color: var(--muted); padding: 6px 2px; }
+.seg-answer { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.seg-answer p { font-size: 13px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+.seg-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.seg-saved { font-size: 12px; color: var(--green-deep); }
+
 /* ---------- 注释编辑底部操作(右下角“确认”) ---------- */
 .cc-card-actions {
   display: flex; align-items: center; justify-content: space-between;

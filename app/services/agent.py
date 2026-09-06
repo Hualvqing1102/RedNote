@@ -38,6 +38,24 @@ SYSTEM_EXPLAIN = (
     "直接输出讲解正文，不要输出 JSON、不要复述这句系统要求。"
 )
 
+SEGMENT_ACTIONS = {"explain", "translate", "ask"}
+
+SYSTEM_SEGMENT_EXPLAIN = (
+    "你是耐心的学习讲解者。用户从一篇笔记里选中了一段文字，"
+    "请把这一段讲明白：先交代它在上下文中的作用，再逐句/逐概念解释含义、术语与逻辑，"
+    "必要时举例。面向“完全没读过该笔记的人”。全程中文，直接输出讲解，不要客套。"
+)
+
+SYSTEM_SEGMENT_TRANSLATE = (
+    "你是专业翻译。把用户选中的内容翻译成通顺、自然的中文；"
+    "专业术语首次出现时保留英文原文括注。只输出译文，不要解释或客套。"
+)
+
+SYSTEM_SEGMENT_ASK = (
+    "你基于用户笔记中选中的段落回答问题。忠实于这段与笔记内容，不编造没有的信息。"
+    "使用中文。"
+)
+
 
 class AgentError(Exception):
     """Agent 调用失败的领域异常（消息可直接展示给用户）。"""
@@ -144,6 +162,61 @@ async def ask(
     except Exception as exc:
         if is_mock:
             return _mock_fallback_ask(note, question)
+        raise AgentError(f"模型返回内容无法解析：{exc}") from exc
+
+
+# ---------------------------------------------------------------- 选中段落
+
+
+async def segment(
+    note: dict[str, Any],
+    text: str,
+    action: str,
+    question: str = "",
+    provider: LLMProvider | None = None,
+) -> str:
+    """对笔记中选中的一段文字做动作：explain 解释 / translate 翻译 / ask 追问。"""
+    if action not in SEGMENT_ACTIONS:
+        raise ValueError(f"不支持的动作：{action}")
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("选中内容为空")
+    text = text[:6000]
+    provider = provider or MockProvider()
+    is_mock = isinstance(provider, MockProvider)
+
+    title = (note.get("title") or "").strip() or "未命名"
+    if action == "explain":
+        system = SYSTEM_SEGMENT_EXPLAIN
+        prompt = f"笔记标题：{title}\n\n选中段落：\n{text}"
+    elif action == "translate":
+        system = SYSTEM_SEGMENT_TRANSLATE
+        prompt = f"笔记标题：{title}\n\n选中内容：\n{text}"
+    else:  # ask
+        q = (question or "").strip()
+        if not q:
+            raise ValueError("请填写要追问的问题")
+        system = SYSTEM_SEGMENT_ASK
+        prompt = f"笔记标题：{title}\n\n选中段落：\n{text}\n\n问题：{q}"
+
+    try:
+        answer = await provider.complete(system, prompt)
+        return (answer or "").strip() or "（没有回答）"
+    except ProviderError as exc:
+        raise AgentError(str(exc)) from exc
+    except Exception as exc:
+        if is_mock:
+            prefix = text.splitlines()[0][:160] if text else ""
+            hint = "解释/翻译/追问将在接入真实模型后提供"
+            if action == "translate":
+                hint = "译文将在接入真实模型后提供"
+            elif action == "explain":
+                hint = "讲解将在接入真实模型后提供"
+            return (
+                f"（本地模拟回答）针对选段「{prefix}…」，{hint}。"
+                if prefix
+                else hint
+            )
         raise AgentError(f"模型返回内容无法解析：{exc}") from exc
 
 

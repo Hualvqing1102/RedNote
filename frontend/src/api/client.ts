@@ -75,6 +75,17 @@ export const api = {
       body: JSON.stringify({ note_id: noteId, question }),
     }),
 
+  agentSegment: (
+    noteId: number,
+    text: string,
+    action: "explain" | "translate" | "ask",
+    question = ""
+  ): Promise<{ answer: string }> =>
+    request("/api/agent/segment", {
+      method: "POST",
+      body: JSON.stringify({ note_id: noteId, text, action, question }),
+    }),
+
   listNotes: (filter: NoteFilter = {}): Promise<Note[]> => {
     const qs = new URLSearchParams();
     if (filter.q) qs.set("q", filter.q);

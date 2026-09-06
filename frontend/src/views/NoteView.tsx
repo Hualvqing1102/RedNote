@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
+import { normalizedSelection, rowIndexOf } from "../lib/selection";
 import { relocateComment, rowsFor } from "../lib/annotations";
 import { useAppStore } from "../store/useAppStore";
 import type { CommentCard, Folder, Note, SettingsResponse } from "../types";
@@ -77,6 +78,13 @@ export default function NoteView() {
   const [editIds, setEditIds] = useState<Set<string>>(new Set());
   // 正在询问“是否删除”的注释卡（点击删除后先确认，不直接删）
   const [delIds, setDelIds] = useState<Set<string>>(new Set());
+  // 阅读页：选中段落后弹出的 Agent 操作
+  const [seg, setSeg] = useState<{ x: number; y: number; index: number; text: string } | null>(null);
+  const [segAsk, setSegAsk] = useState(false);
+  const [segAskQ, setSegAskQ] = useState("");
+  const [segBusy, setSegBusy] = useState(false);
+  const [segAnswer, setSegAnswer] = useState<string | null>(null);
+  const [segSaved, setSegSaved] = useState(false);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
@@ -396,6 +404,83 @@ export default function NoteView() {
     );
   }
 
+  // ------------------------------------------------ 选中段落 → Agent
+
+  function onBodyMouseUp() {
+    if (editing) return;
+    const container = bodyRef.current;
+    const sel = window.getSelection();
+    const text = normalizedSelection(sel);
+    if (!text || !container || !sel || sel.rangeCount === 0) return;
+    const index = rowIndexOf(container, sel.anchorNode);
+    if (index < 0) return;
+    // 计算浮动条位置；部分环境(如测试 jsdom)Range 没有 getBoundingClientRect，给默认值
+    let left = 8;
+    let top = 8;
+    const range = sel.rangeCount ? sel.getRangeAt(0) : null;
+    const rectFn = (range as (Range & { getBoundingClientRect?: () => DOMRect }) | null)
+      ?.getBoundingClientRect;
+    if (range && typeof rectFn === "function") {
+      try {
+        const rect = rectFn.call(range);
+        left = Math.max(8, rect.left);
+        top = Math.max(8, rect.bottom + 8);
+      } catch {
+        // 保持默认位置
+      }
+    }
+    setSeg({ x: left, y: top, index, text: text.slice(0, 6000) });
+    setSegAsk(false);
+    setSegAskQ("");
+    setSegAnswer(null);
+    setSegSaved(false);
+  }
+
+  function closeSeg() {
+    setSeg(null);
+    setSegAsk(false);
+    setSegAnswer(null);
+    setSegSaved(false);
+  }
+
+  async function runSeg(action: "explain" | "translate" | "ask", question = "") {
+    if (!note || !seg || segBusy) return;
+    setSegBusy(true);
+    setSegAnswer(null);
+    setSegSaved(false);
+    try {
+      const r = await api.agentSegment(note.id, seg.text, action, question);
+      setSegAnswer(r.answer);
+    } catch (e) {
+      setSegAnswer(e instanceof Error ? e.message : "请求失败");
+    } finally {
+      setSegBusy(false);
+    }
+  }
+
+  function copySegAnswer() {
+    if (!segAnswer) return;
+    const nav = navigator as Navigator & { clipboard?: { writeText: (t: string) => Promise<void> } };
+    if (nav.clipboard?.writeText) {
+      nav.clipboard.writeText(segAnswer).catch(() => {});
+    }
+  }
+
+  function segToComment() {
+    if (!note || !seg || !segAnswer) return;
+    const id = newCardId();
+    const total = splitBlocks(note.content).length;
+    const card: CommentCard = {
+      id,
+      text: segAnswer,
+      links: [],
+      anchor: Math.min(seg.index, total - 1),
+    };
+    setComments((prev) => [...prev, card]);
+    setCommentsDirty(true);
+    setSegSaved(true);
+  }
+
   if (!note) {
     return <div className="hint">加载中…</div>;
   }
@@ -548,6 +633,7 @@ export default function NoteView() {
             <div
               ref={bodyRef}
               className={`body annotated${dragId ? " dragging" : ""}`}
+              onMouseUp={onBodyMouseUp}
               onContextMenu={(e) => {
                 if (editing) return;
                 e.preventDefault();
@@ -753,6 +839,81 @@ export default function NoteView() {
             </button>
             {menuBlock && (
               <div className="ctx-preview">{snippetOf(menuBlock).slice(0, 40)}</div>
+            )}
+          </div>
+        )}
+
+        {seg && !editing && (
+          <div
+            className="seg-pop"
+            style={{ left: seg.x, top: seg.y }}
+            onPointerDown={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="选中段落操作"
+          >
+            <div className="seg-head">
+              <span className="t">第 {seg.index + 1} 段 · 选中文字</span>
+              <button className="x" aria-label="关闭选中操作" onClick={closeSeg}>
+                ×
+              </button>
+            </div>
+            <div className="seg-src" title={seg.text}>
+              {seg.text.length > 220 ? `${seg.text.slice(0, 220)}…` : seg.text}
+            </div>
+
+            {segAnswer === null && !segAsk && !segBusy && (
+              <div className="seg-btns">
+                <button onClick={() => runSeg("explain")}>解释这段</button>
+                <button onClick={() => runSeg("translate")}>翻译为中文</button>
+                <button onClick={() => setSegAsk(true)}>追问细节</button>
+              </div>
+            )}
+
+            {segAsk && !segBusy && (
+              <div className="seg-ask">
+                <input
+                  autoFocus
+                  value={segAskQ}
+                  onChange={(e) => setSegAskQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const q = segAskQ.trim();
+                      if (q) runSeg("ask", q);
+                    }
+                  }}
+                  placeholder="就这段文字问点什么…"
+                  aria-label="追问输入"
+                />
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => {
+                    const q = segAskQ.trim();
+                    if (q) runSeg("ask", q);
+                  }}
+                  disabled={!segAskQ.trim() || segBusy}
+                >
+                  追问
+                </button>
+              </div>
+            )}
+
+            {segBusy && <div className="seg-busy">正在调用模型…</div>}
+
+            {segAnswer !== null && (
+              <div className="seg-answer">
+                <p>{segAnswer}</p>
+                <div className="seg-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={copySegAnswer}>
+                    复制
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={segToComment}>
+                    存为注释
+                  </button>
+                  {segSaved && (
+                    <span className="seg-saved">已追加到第 {seg.index + 1} 段批注 ✓</span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
