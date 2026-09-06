@@ -134,6 +134,117 @@ def _promote_style_headings(markdown: str, html: str) -> str:
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------- 补漏 / 去噪
+
+
+_NOISE_KEYWORDS = (
+    "newsletter", "signup", "subscribe", "subscribe-", "share", "social",
+    "related", "sidebar", "breadcrumb", "author", "cookie", "advert", "promo",
+    "footer", "disclaimer", "toolbar", "utility-nav",
+)
+_MD_MARK_RE = re.compile(r"(\*\*|\*|`|_|^#+\s*)")
+_LINK_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)|\[([^\]]*)\]\([^)]*\)")
+
+
+def _plain_norm(text: str) -> str:
+    """正文块对比用归一化：去空白、Markdown 记号、链接，统一引号。"""
+    text = _MD_MARK_RE.sub("", text or "")
+    text = _LINK_RE.sub(lambda m: m.group(1) or "", text)
+    for a, b in {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+                 "\u2013": "-", "\u2014": "-", "\u200b": "", "\u00a0": " "}.items():
+        text = text.replace(a, b)
+    text = re.sub(r"\s+", "", text)
+    return text.lower()
+
+
+def _is_noise_el(el: Any) -> bool:
+    node = el
+    while node is not None and getattr(node, "tag", None) not in ("html", "body", None):
+        cls = " ".join((node.get("class") or "").split()).lower()
+        eid = (node.get("id") or "").lower()
+        if any(k in cls or k in eid for k in _NOISE_KEYWORDS):
+            return True
+        node = node.getparent()
+    return False
+
+
+def _backfill_missing(markdown: str, html: str) -> str:
+    """用原始 DOM 找回抽取器漏掉的正文块，并按原顺序插回；剔除噪音。
+
+    思路：
+    1. 把已抽正文按段切分(cleaned)，并在 DOM 里收集正文候选块(<p>/<li>/<pre>…)；
+    2. 噪音区(订阅/分享/页脚等)的文本块从正文里剔除；
+    3. 按 DOM 顺序双指针合并：漏块(不在正文中)插入其前后已有内容之间。
+    """
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", markdown) if p.strip()]
+    if not paragraphs:
+        return markdown
+    try:
+        doc = lxml_html.fromstring(html)
+    except Exception:
+        return markdown
+    root = (doc.xpath("//article | //main") or [doc])[0]
+
+    # 1) 收集 DOM 噪音区文本并剔除正文中对应的段落
+    noise_texts: set[str] = set()
+    for el in root.iter("p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "pre"):
+        if isinstance(el.tag, str) and _is_noise_el(el):
+            noise_texts.add(_plain_norm("".join(el.itertext())))
+    cleaned = [p for p in paragraphs if _plain_norm(p) not in noise_texts]
+    if not cleaned:
+        cleaned = paragraphs
+
+    # 2) DOM 顺序收集正文候选(排除噪音与过短块)
+    dom_blocks: list[str] = []
+    for el in root.iter("p", "li", "pre", "blockquote"):
+        if not isinstance(el.tag, str) or _is_noise_el(el):
+            continue
+        text = "".join(el.itertext()).strip()
+        if len(_plain_norm(text)) >= 35:
+            dom_blocks.append(text)
+
+    # 3) 双指针合并
+    segments: list[str] = []
+    clean_idx = 0
+    used: set[str] = set()
+
+    def norm_eq(a: str, b: str) -> bool:
+        return _plain_norm(a) == _plain_norm(b)
+
+    for dom_text in dom_blocks:
+        n = _plain_norm(dom_text)
+        if n in used:
+            continue
+        # 找到正文中与之相等的段落：从当前指针向后找
+        found = None
+        for i in range(clean_idx, len(cleaned)):
+            if norm_eq(cleaned[i], dom_text):
+                found = i
+                break
+        if found is not None:
+            segments.extend(cleaned[clean_idx : found + 1])
+            clean_idx = found + 1
+            used.add(n)
+        else:
+            # 可能正文里已包含该句(例如被合并进别的段落)，跳过，避免重复
+            already_covered = any(
+                n in _plain_norm(c) and len(_plain_norm(c)) > len(n) for c in cleaned
+            )
+            if already_covered:
+                continue
+            # 真正漏掉的块：插入当前输出流(位于其前文之后)
+            segments.append(dom_text)
+            used.add(n)
+
+    # 4) 收尾：把还没输出的正文段接上
+    segments.extend(cleaned[clean_idx:])
+
+    out = "\n\n".join(segments).strip()
+    out = re.sub(r"[ \t]+\n", "\n", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out if out else markdown
+
+
 async def collect_url(
     url: str,
     http_client: httpx.AsyncClient | None = None,
@@ -174,8 +285,11 @@ async def collect_url(
         if not extracted or not extracted.strip():
             raise CollectError("未能从网页中抽取到正文，可能页面需要登录或由脚本动态渲染")
 
+        # 补漏 + 去噪：用原始 DOM 对照已抽取正文，找回漏掉的段落/列表项，
+        # 并按原文顺序插回；同时剔除订阅/分享等噪音块。
+        content = _backfill_missing(extracted.strip(), html)
         # 观察原始 DOM：把带结构信号的段落行升级为对应级标题
-        content = _promote_style_headings(extracted.strip(), html)
+        content = _promote_style_headings(content, html)
 
         return {
             "title": _extract_title(html, url),
