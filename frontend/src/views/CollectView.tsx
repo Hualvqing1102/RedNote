@@ -176,9 +176,7 @@ export default function CollectView() {
           onChange={(e) => setExplainMode(e.target.checked)}
         />
         <span className="t">详细讲解模式</span>
-        <span className="d">
-          不保存原文，改为让 AI 逐段详解，帮助完全读懂（适合排版杂乱的网页）
-        </span>
+        <span className="d">不保存原文，改为让 AI 逐段详解</span>
       </label>
 
       {error && (
