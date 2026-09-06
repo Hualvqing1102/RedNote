@@ -1668,3 +1668,15 @@ a.btn { text-decoration: none; }
   width: 340px; max-height: calc(100vh - 100px);
   margin: 0; z-index: 30;
 }
+
+/* 抽屉：从右侧平滑滑入，高度与日历对齐 */
+@keyframes drawer-in { from { transform: translateX(100%); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.cal-drawer {
+  position: absolute !important; right: 0; top: 0; bottom: 0;
+  height: auto; min-height: 0; max-height: none;
+  animation: drawer-in 0.28s ease;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.cal-drawer .drawer-list { flex: none; overflow-y: auto; }
+.cal-drawer .drawer-form { flex: none; }
+@media (max-width: 1000px) { .cal-drawer { width: min(94vw, 340px); } }
