@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     title      TEXT NOT NULL,
     kind       TEXT NOT NULL DEFAULT 'todo',      -- 'schedule' 日程 | 'todo' 待办
+    color      TEXT NOT NULL DEFAULT 'green',     -- green/blue/yellow/pink/purple
     start_ts   INTEGER NOT NULL,                  -- 秒级时间戳(本地)
     end_ts     INTEGER,                           -- 日程结束(可为空)
     all_day    INTEGER NOT NULL DEFAULT 0,
@@ -75,5 +76,10 @@ def init_db(db_path: str | Path) -> None:
         # 3) 彻底移除标签体系(含历史数据)
         conn.execute("DROP TABLE IF EXISTS note_tags")
         conn.execute("DROP TABLE IF EXISTS tags")
+        # 4) events 老表补 color 列
+        if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").fetchone():
+            ev_cols = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
+            if "color" not in ev_cols:
+                conn.execute("ALTER TABLE events ADD COLUMN color TEXT NOT NULL DEFAULT 'green'")
         # 移除早期测试版“图片抓取”遗留的 media 表（功能已下架）
         conn.execute("DROP TABLE IF EXISTS media")

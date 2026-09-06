@@ -11,7 +11,8 @@ from typing import Any
 from app.db import connect
 
 KINDS = {"schedule", "todo"}
-PATCHABLE = {"title", "kind", "start_ts", "end_ts", "all_day", "done", "note_id"}
+COLORS = {"green", "blue", "yellow", "pink", "purple"}
+PATCHABLE = {"title", "kind", "color", "start_ts", "end_ts", "all_day", "done", "note_id"}
 
 
 def _now() -> int:
@@ -49,6 +50,12 @@ def _clean(data: dict[str, Any], *, partial: bool) -> dict[str, Any]:
             if not isinstance(start, int) or isinstance(start, bool):
                 raise ValueError("开始时间必须为时间戳")
             out["start_ts"] = start
+
+    if "color" in data:
+        color = data.get("color")
+        if color not in COLORS:
+            raise ValueError("颜色值不支持")
+        out["color"] = color
 
     if "end_ts" in data:
         end = data.get("end_ts")
@@ -102,13 +109,13 @@ def create_event(db_path: str | Path, data: dict[str, Any]) -> dict[str, Any]:
     with connect(db_path) as conn:
         cur = conn.execute(
             """
-            INSERT INTO events (title, kind, start_ts, end_ts, all_day, done, note_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO events (title, kind, color, start_ts, end_ts, all_day, done, note_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                clean["title"], clean["kind"], clean["start_ts"], clean.get("end_ts"),
-                clean.get("all_day", 0), clean.get("done", 0), clean.get("note_id"),
-                now, now,
+                clean["title"], clean["kind"], clean.get("color", "green"), clean["start_ts"],
+                clean.get("end_ts"), clean.get("all_day", 0), clean.get("done", 0),
+                clean.get("note_id"), now, now,
             ),
         )
         return _row(conn.execute("SELECT * FROM events WHERE id = ?", (cur.lastrowid,)).fetchone())
