@@ -164,6 +164,15 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {"answer": answer}
 
+    @app.post("/api/agent/explain")
+    async def explain(payload: SummarizeIn) -> dict[str, Any]:
+        try:
+            return await agent_service.explain(
+                payload.title, payload.content, provider=_current_provider()
+            )
+        except agent_service.AgentError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     # ------------------------------------------------ 笔记
 
     @app.get("/api/notes")

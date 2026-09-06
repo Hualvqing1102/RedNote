@@ -48,6 +48,18 @@ def test_agent_summarize_mock_without_tags(client):
     assert "tags" not in data
 
 
+def test_agent_explain_mock(client):
+    resp = client.post(
+        "/api/agent/explain",
+        json={"title": "上下文工程", "content": "第一段介绍。\n\n第二段深入。\n\n第三段总结。"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "上下文工程"
+    assert len(data["explanation"]) > 20
+    assert "第一段介绍。" in data["explanation"] or "第 1 部分" in data["explanation"]
+
+
 def test_agent_ask_missing_note(client):
     resp = client.post("/api/agent/ask", json={"note_id": 99999, "question": "什么是注意力"})
     assert resp.status_code == 404
