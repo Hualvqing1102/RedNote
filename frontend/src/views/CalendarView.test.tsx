@@ -56,10 +56,10 @@ describe("CalendarView", () => {
   });
 
   it("右侧面板新建待办并调用创建接口", async () => {
-    render(<CalendarView />);
+    const { container } = render(<CalendarView />);
     await screen.findByText("周会");
 
-    fireEvent.click(screen.getByRole("button", { name: "＋ 新建" }));
+    fireEvent.click(container.querySelector(".cal-cell.today") as HTMLElement);
     fireEvent.click(screen.getByRole("button", { name: "待办" }));
     fireEvent.change(screen.getByLabelText("标题"), { target: { value: "交周报" } });
     fireEvent.click(screen.getByRole("button", { name: "添加到当日" }));
@@ -72,10 +72,10 @@ describe("CalendarView", () => {
   });
 
   it("点击“设为每周待办”按钮后保存会带上每周重复标记", async () => {
-    render(<CalendarView />);
+    const { container } = render(<CalendarView />);
     await screen.findByText("周会");
 
-    fireEvent.click(screen.getByRole("button", { name: "＋ 新建" }));
+    fireEvent.click(container.querySelector(".cal-cell.today") as HTMLElement);
     fireEvent.click(screen.getByRole("button", { name: "设为每周待办" }));
     fireEvent.change(screen.getByLabelText("标题"), { target: { value: "每日英语" } });
     fireEvent.click(screen.getByRole("button", { name: "添加到当日" }));

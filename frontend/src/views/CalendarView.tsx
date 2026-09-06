@@ -285,9 +285,6 @@ export default function CalendarView() {
               <button className={`cal-mode${mode === "month" ? " active" : ""}`} onClick={() => setMode("month")}>月</button>
               <button className={`cal-mode${mode === "week" ? " active" : ""}`} onClick={() => setMode("week")}>周</button>
             </div>
-            <button className="btn btn-primary btn-sm" onClick={() => resetFormFor(new Date())}>
-              ＋ 新建
-            </button>
           </div>
 
           {error && <div className="error-banner" role="alert">{error}</div>}
