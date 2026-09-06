@@ -229,7 +229,12 @@ textarea {
   padding: 6px 12px;
   font-size: 12.5px;
 }
-.btn-toggle-on {
+.btn-recur {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+.btn-recur.btn-toggle-on {
   background: var(--green);
   color: #fff;
   border-color: var(--green);

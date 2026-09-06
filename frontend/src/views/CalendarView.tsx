@@ -445,7 +445,7 @@ export default function CalendarView() {
 
               <div className="field-row"><span>每周</span>
                 <button type="button"
-                  className={`btn btn-sm${form.recur === "weekly" ? " btn-toggle-on" : ""}`}
+                  className={`btn btn-sm btn-recur${form.recur === "weekly" ? " btn-toggle-on" : ""}`}
                   onClick={() => setForm({ ...form, recur: form.recur === "weekly" ? "none" : "weekly" })}>
                   {form.recur === "weekly" ? "每周重复 ✓" : "设为每周待办"}
                 </button>
