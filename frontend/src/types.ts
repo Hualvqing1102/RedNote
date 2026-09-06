@@ -79,6 +79,8 @@ export interface CollectResult {
   title: string;
   content: string;
   source_url: string;
+  /** 本地文档导入时的原始文件名 */
+  filename?: string;
 }
 
 export interface Summary {

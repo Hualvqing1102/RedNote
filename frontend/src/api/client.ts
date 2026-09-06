@@ -14,8 +14,9 @@ import type {
 } from "../types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isForm = init?.body instanceof FormData;
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    headers: isForm ? init?.headers : { "Content-Type": "application/json", ...init?.headers },
     ...init,
   });
   if (!res.ok) {
@@ -42,6 +43,12 @@ export type NotePatch = Partial<NoteInput> & { comments?: CommentCard[] };
 export const api = {
   collectUrl: (url: string): Promise<CollectResult> =>
     request("/api/collect", { method: "POST", body: JSON.stringify({ url }) }),
+
+  collectFile: (file: File): Promise<CollectResult> => {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    return request("/api/collect/file", { method: "POST", body: fd });
+  },
 
   summarize: (title: string, content: string): Promise<Summary> =>
     request("/api/agent/summarize", {

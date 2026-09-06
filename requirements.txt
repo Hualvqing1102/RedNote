@@ -2,3 +2,7 @@ fastapi
 uvicorn[standard]
 httpx
 trafilatura
+python-multipart
+pymupdf
+python-docx
+rapidocr-onnxruntime

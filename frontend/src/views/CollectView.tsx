@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderBlocks, withoutLeadingTitle } from "../lib/markdown";
@@ -12,10 +12,13 @@ const EXAMPLES = [
 ];
 
 const STEPS = [
-  { label: "正在读取网页正文…", sub: "从页面中剔除广告与导航" },
+  { label: "正在读取内容…", sub: "从网页或本地文档中提取正文" },
   { label: "Agent 正在提炼要点与摘要…", sub: "按设置的 Provider 生成" },
   { label: "整理为笔记草稿…", sub: "确认后可保存" },
 ];
+
+const ACCEPT_EXTS = ".pdf,.docx,.txt,.md";
+const FILE_EXTS = ["pdf", "docx", "txt", "md"];
 
 type Phase = 0 | 1 | 2 | 3 | 4; // 0=空闲/出错, 1~3=分步进行中, 4=完成
 
@@ -40,6 +43,8 @@ export default function CollectView() {
   const [engineError, setEngineError] = useState(false);
   // 详细讲解模式：不保存原文，改成让 Agent 生成逐段详解
   const [explainMode, setExplainMode] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function start() {
     const target = url.trim();
@@ -49,6 +54,16 @@ export default function CollectView() {
     }
     setError("");
     setDraft(null);
+    try {
+      const collect = await api.collectUrl(target);
+      await processCollect(collect);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "采集失败，请检查链接");
+      setPhase(0);
+    }
+  }
+
+  async function processCollect(collect: CollectResult) {
     setPhase(1);
     // 先取一次设置，用于明示当前总结由什么引擎处理(隐私提示)
     try {
@@ -57,7 +72,6 @@ export default function CollectView() {
       setEngineError(true);
     }
     try {
-      const collect = await api.collectUrl(target);
       setPhase(2);
       if (explainMode) {
         // 讲解模式：同一篇原文并行生成 摘要+要点 与 详细讲解；不保存原文
@@ -74,7 +88,26 @@ export default function CollectView() {
       }
       setPhase(4);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "采集失败，请检查链接");
+      setError(e instanceof Error ? e.message : "处理失败，请重试");
+      setPhase(0);
+    }
+  }
+
+  async function handleFiles(files: FileList | null) {
+    const file = files && files[0];
+    if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!FILE_EXTS.includes(ext)) {
+      setError(`暂不支持「${file.name}」：请使用 PDF / DOCX / TXT / Markdown`);
+      return;
+    }
+    setError("");
+    setDraft(null);
+    try {
+      const collect = await api.collectFile(file);
+      await processCollect(collect);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "解析文档失败");
       setPhase(0);
     }
   }
@@ -143,8 +176,49 @@ export default function CollectView() {
       <div className="collect-hero">
         <div className="eyebrow">Capture → Distill → Keep</div>
         <h2>把网页里的知识，提炼成你自己的笔记</h2>
-        <p>粘贴一篇文章的链接，RedNote 帮你读原文、提炼要点，内容只保存在你的电脑上。</p>
+        <p>粘贴一篇文章的链接，或把论文 PDF / DOCX 拖进来，RedNote 帮你读原文、提炼要点，内容只保存在你的电脑上。</p>
       </div>
+
+      <div
+        className={`dropzone${dragOver ? " over" : ""}`}
+        role="button"
+        tabIndex={0}
+        aria-label="上传本地文档"
+        onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          handleFiles(e.dataTransfer.files);
+        }}
+      >
+        <div className="dz-icon" aria-hidden>📄</div>
+        <div className="t">把论文 PDF / DOCX 拖到这里</div>
+        <div className="d">或点击选择文件 · 支持 PDF / DOCX / TXT / Markdown · 扫描版 PDF 会自动 OCR</div>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPT_EXTS}
+        style={{ display: "none" }}
+        aria-label="选择本地文档"
+        onChange={async (e) => {
+          await handleFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+
+      <div className="collect-or"><span>或粘贴网页链接</span></div>
 
       <div className="urlbar">
         <input
@@ -226,7 +300,11 @@ export default function CollectView() {
               </div>
               <div className="panel-body article">
                 <h3>{draft.collect.title}</h3>
-                <div className="src">{draft.collect.source_url}</div>
+                <div className="src">
+                  {draft.collect.filename
+                    ? `📄 ${draft.collect.filename}`
+                    : draft.collect.source_url}
+                </div>
                 {explainMode && draft.explanation ? (
                   renderBlocks(draft.explanation.explanation)
                 ) : (

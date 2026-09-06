@@ -22,6 +22,7 @@ if (-not (Test-Path $pyinstaller)) {
 & $pyinstaller --noconfirm --clean --onefile --windowed --name RedNote `
     --add-data "frontend\dist;frontend_dist" `
     --hidden-import webview.platforms.winforms `
+    --collect-data rapidocr_onnxruntime `
     run_desktop.py
 
 Pop-Location

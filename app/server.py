@@ -4,7 +4,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -196,6 +196,18 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
         try:
             return await collect_service.collect_url(payload.url)
         except CollectError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/collect/file")
+    async def collect_file(file: UploadFile = File(...)) -> dict[str, Any]:
+        """拖拽导入本地文档：PDF / DOCX / TXT / Markdown(扫描件自动 OCR)。"""
+        from app.services import fileparse
+
+        data = await file.read()
+        try:
+            fileparse.check_size(len(data))
+            return fileparse.parse_bytes(file.filename, data)
+        except fileparse.FileParseError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # ------------------------------------------------ Agent

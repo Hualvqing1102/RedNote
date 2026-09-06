@@ -9,6 +9,7 @@ vi.mock("../api/client", () => ({
   api: {
     getSettings: vi.fn(),
     collectUrl: vi.fn(),
+    collectFile: vi.fn(),
     summarize: vi.fn(),
     explain: vi.fn(),
     createNote: vi.fn(),
@@ -34,6 +35,7 @@ describe("CollectView", () => {
     useAppStore.setState({ view: "collect", activeNoteId: null });
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(MOCK_ENGINE);
     vi.mocked(api.collectUrl).mockReset();
+    vi.mocked(api.collectFile).mockReset();
     vi.mocked(api.summarize).mockReset();
     vi.mocked(api.explain).mockReset();
     vi.mocked(api.createNote).mockReset();
@@ -87,6 +89,47 @@ describe("CollectView", () => {
       expect(api.createNote).toHaveBeenCalled();
       expect(useAppStore.getState().view).toBe("library");
     });
+  });
+
+  it("选择本地 PDF/DOCX 文件后走提炼流程并可保存", async () => {
+    vi.mocked(api.collectFile).mockResolvedValue({
+      title: "attention_paper",
+      content: "Attention is all you need.\n\nSelf-attention enables parallelization.",
+      source_url: "",
+      filename: "attention_paper.pdf",
+    });
+    vi.mocked(api.summarize).mockResolvedValue({
+      title: "attention_paper",
+      summary: "文件摘要",
+      points: ["要点一"],
+    });
+    const { container } = render(<CollectView />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["paper content"], "attention_paper.pdf", { type: "application/pdf" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    const saveBtn = await screen.findByRole("button", { name: "保存为笔记" });
+    expect(api.collectFile).toHaveBeenCalledWith(file);
+    expect(api.summarize).toHaveBeenCalled();
+    expect(screen.getByText("文件摘要")).toBeInTheDocument();
+
+    fireEvent.click(saveBtn);
+    await waitFor(() => {
+      expect(api.createNote).toHaveBeenCalled();
+      expect(useAppStore.getState().view).toBe("library");
+    });
+  });
+
+  it("不支持的文件类型直接提示，不发请求", async () => {
+    const { container } = render(<CollectView />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["old"], "paper.doc", { type: "application/msword" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByText(/暂不支持/)).toBeInTheDocument();
+    expect(api.collectFile).not.toHaveBeenCalled();
   });
 
   it("引擎为云端 Claude 时给出隐私警示文案", async () => {
