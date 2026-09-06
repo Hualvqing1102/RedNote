@@ -3,7 +3,7 @@ import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderBlocks, withoutLeadingTitle } from "../lib/markdown";
 import { useAppStore } from "../store/useAppStore";
-import type { CollectResult, NoteInput, SettingsResponse, Summary } from "../types";
+import type { CollectResult, ExplainResult, NoteInput, SettingsResponse, Summary } from "../types";
 
 const EXAMPLES = [
   "example.com/transformer",
@@ -29,11 +29,17 @@ export default function CollectView() {
   const setView = useAppStore((s) => s.setView);
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>(0);
-  const [draft, setDraft] = useState<{ collect: CollectResult; summary: Summary } | null>(null);
+  const [draft, setDraft] = useState<{
+    collect: CollectResult;
+    summary: Summary;
+    explanation?: ExplainResult;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [engine, setEngine] = useState<SettingsResponse | null>(null);
   const [engineError, setEngineError] = useState(false);
+  // 详细讲解模式：不保存原文，改成让 Agent 生成逐段详解
+  const [explainMode, setExplainMode] = useState(false);
 
   async function start() {
     const target = url.trim();
@@ -53,9 +59,19 @@ export default function CollectView() {
     try {
       const collect = await api.collectUrl(target);
       setPhase(2);
-      const summary = await api.summarize(collect.title, collect.content);
-      setPhase(3);
-      setDraft({ collect, summary });
+      if (explainMode) {
+        // 讲解模式：同一篇原文并行生成 摘要+要点 与 详细讲解；不保存原文
+        const [summary, explanation] = await Promise.all([
+          api.summarize(collect.title, collect.content),
+          api.explain(collect.title, collect.content),
+        ]);
+        setPhase(3);
+        setDraft({ collect, summary, explanation });
+      } else {
+        const summary = await api.summarize(collect.title, collect.content);
+        setPhase(3);
+        setDraft({ collect, summary });
+      }
       setPhase(4);
     } catch (e) {
       setError(e instanceof Error ? e.message : "采集失败，请检查链接");
@@ -67,7 +83,26 @@ export default function CollectView() {
     if (!draft) return;
     setSaving(true);
     setError("");
-    // 正文存为 Markdown：去掉与笔记标题重复的正文首行标题，避免详情页重复展示
+    if (explainMode && draft.explanation) {
+      // 讲解模式：笔记正文 = AI 详细讲解，原文不落地
+      const input: NoteInput = {
+        title: draft.summary.title,
+        summary: draft.summary.summary,
+        content: draft.explanation.explanation,
+        points: draft.summary.points,
+        source_url: draft.collect.source_url,
+        source_snapshot: "",
+      };
+      try {
+        await api.createNote(input);
+        setView("library");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "保存失败");
+        setSaving(false);
+      }
+      return;
+    }
+    // 常规模式：正文存为 Markdown（去掉与标题重复的首行标题）
     const content = withoutLeadingTitle(draft.collect.content, draft.collect.title);
     const input: NoteInput = {
       title: draft.summary.title,
@@ -108,7 +143,7 @@ export default function CollectView() {
       <div className="collect-hero">
         <div className="eyebrow">Capture → Distill → Keep</div>
         <h2>把网页里的知识，提炼成你自己的笔记</h2>
-        <p>粘贴一篇文章的链接，RedNote 帮你读原文、提炼要点、打上标签。内容只保存在你的电脑上。</p>
+        <p>粘贴一篇文章的链接，RedNote 帮你读原文、提炼要点，内容只保存在你的电脑上。</p>
       </div>
 
       <div className="urlbar">
@@ -132,6 +167,19 @@ export default function CollectView() {
           </button>
         ))}
       </div>
+
+      <label className={`explain-toggle${busy ? " disabled" : ""}`}>
+        <input
+          type="checkbox"
+          checked={explainMode}
+          disabled={busy}
+          onChange={(e) => setExplainMode(e.target.checked)}
+        />
+        <span className="t">详细讲解模式</span>
+        <span className="d">
+          不保存原文，改为让 AI 逐段详解，帮助完全读懂（适合排版杂乱的网页）
+        </span>
+      </label>
 
       {error && (
         <div className="error-banner" role="alert">
@@ -169,13 +217,23 @@ export default function CollectView() {
           <div className="result-grid">
             <section className="panel">
               <div className="panel-head">
-                <span className="lbl">原文摘录</span>
-                <span className="lbl">{draft.collect.content.length.toLocaleString()} 字</span>
+                <span className="lbl">{explainMode && draft.explanation ? "详细讲解" : "原文摘录"}</span>
+                <span className="lbl">
+                  {(explainMode && draft.explanation
+                    ? draft.explanation.explanation.length
+                    : draft.collect.content.length
+                  ).toLocaleString()}{" "}
+                  字
+                </span>
               </div>
               <div className="panel-body article">
                 <h3>{draft.collect.title}</h3>
                 <div className="src">{draft.collect.source_url}</div>
-                {renderBlocks(withoutLeadingTitle(draft.collect.content, draft.collect.title))}
+                {explainMode && draft.explanation ? (
+                  renderBlocks(draft.explanation.explanation)
+                ) : (
+                  renderBlocks(withoutLeadingTitle(draft.collect.content, draft.collect.title))
+                )}
               </div>
             </section>
 

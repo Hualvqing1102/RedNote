@@ -10,6 +10,7 @@ vi.mock("../api/client", () => ({
     getSettings: vi.fn(),
     collectUrl: vi.fn(),
     summarize: vi.fn(),
+    explain: vi.fn(),
     createNote: vi.fn(),
     updateNote: vi.fn(),
     deleteNote: vi.fn(),
@@ -32,6 +33,7 @@ describe("CollectView", () => {
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(MOCK_ENGINE);
     vi.mocked(api.collectUrl).mockReset();
     vi.mocked(api.summarize).mockReset();
+    vi.mocked(api.explain).mockReset();
     vi.mocked(api.createNote).mockReset();
   });
 
@@ -109,5 +111,40 @@ describe("CollectView", () => {
 
     expect(await screen.findByText(/正文会发送到 Anthropic 处理/)).toBeInTheDocument();
     await screen.findByRole("button", { name: "保存为笔记" });
+  });
+
+  it("详细讲解模式：不保存原文，正文保存为 AI 讲解", async () => {
+    vi.mocked(api.collectUrl).mockResolvedValue({
+      title: "T",
+      content: "原文第一段。\n\n原文第二段。",
+      source_url: "https://example.com/a",
+    });
+    vi.mocked(api.summarize).mockResolvedValue({ title: "T", summary: "摘要", points: ["要点"] });
+    vi.mocked(api.explain).mockResolvedValue({
+      title: "T",
+      explanation: "# 详细讲解\n\n第一段讲的是…（讲解内容）",
+    });
+
+    render(<CollectView />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /详细讲解模式/ }));
+    fireEvent.change(screen.getByLabelText("网页链接"), {
+      target: { value: "https://example.com/a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "提炼" }));
+
+    // 预览左侧显示“详细讲解”正文，而不是原文
+    expect(await screen.findByRole("heading", { name: "详细讲解" })).toBeInTheDocument();
+    expect(screen.getByText(/讲解内容/)).toBeInTheDocument();
+    expect(api.explain).toHaveBeenCalledWith("T", "原文第一段。\n\n原文第二段。");
+
+    fireEvent.click(screen.getByRole("button", { name: "保存为笔记" }));
+    await waitFor(() => {
+      expect(api.createNote).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: "# 详细讲解\n\n第一段讲的是…（讲解内容）",
+          source_snapshot: "",
+        })
+      );
+    });
   });
 });

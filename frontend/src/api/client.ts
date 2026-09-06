@@ -1,6 +1,7 @@
 import type {
   CollectResult,
   CommentCard,
+  ExplainResult,
   Folder,
   Note,
   NoteInput,
@@ -41,6 +42,12 @@ export const api = {
 
   summarize: (title: string, content: string): Promise<Summary> =>
     request("/api/agent/summarize", {
+      method: "POST",
+      body: JSON.stringify({ title, content }),
+    }),
+
+  explain: (title: string, content: string): Promise<ExplainResult> =>
+    request("/api/agent/explain", {
       method: "POST",
       body: JSON.stringify({ title, content }),
     }),

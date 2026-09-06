@@ -1507,3 +1507,13 @@ a.btn { text-decoration: none; }
   padding: 3px 8px; background: var(--surface); cursor: pointer;
 }
 .note-folder select:hover { border-color: var(--muted); color: var(--ink); }
+
+/* ---------- 采集页：详细讲解模式开关 ---------- */
+.explain-toggle {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  margin: 12px 0 4px; font-size: 13px; cursor: pointer;
+}
+.explain-toggle.disabled { opacity: 0.6; cursor: not-allowed; }
+.explain-toggle input { accent-color: var(--green); transform: translateY(1px); }
+.explain-toggle .t { font-weight: 600; color: var(--green-deep); }
+.explain-toggle .d { color: var(--muted); }

@@ -55,6 +55,11 @@ export interface Summary {
   points: string[];
 }
 
+export interface ExplainResult {
+  title: string;
+  explanation: string;
+}
+
 export type ProviderName = "mock" | "claude" | "openai";
 
 export interface ProviderGroupView {
