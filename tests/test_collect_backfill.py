@@ -22,6 +22,8 @@ HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></hea
       <li>Multi-agent architectures handle complex research and analysis where parallel exploration pays dividends.</li>
     </ul>
   </div>
+  <h2>Conclusion</h2>
+  <p>Context engineering is still an evolving field, and there is much to learn about best practices.</p>
 </article>
 </main></body></html>"""
 
@@ -48,9 +50,13 @@ def test_backfill_adds_missing_and_removes_noise():
     assert "Compaction maintains conversational flow" in out
     assert "Note-taking excels for iterative development" in out
     assert "Multi-agent architectures handle complex research" in out
+    # 找回被丢弃的语义标题
+    assert "## Conclusion" in out
+    assert "still an evolving field" in out
     # 顺序：导语应在正文段之前，三条在“长时任务”小节内
     assert out.index("critical but finite resource") < out.index("After a few years")
     assert out.index("Compaction maintains") < out.index("Multi-agent architectures")
+    assert out.index("## Conclusion") > out.index("Compaction maintains")
 
 
 def test_backfill_unchanged_when_nothing_missing():

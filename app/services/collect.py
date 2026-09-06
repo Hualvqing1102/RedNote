@@ -47,15 +47,154 @@ def _extract_title(html: str, fallback: str) -> str:
     return fallback
 
 
+# ---------------------------------------------------------------- CSS-lite 引擎
+
+_SIZE_WORDS = {
+    "xx-small": 9, "x-small": 10, "small": 13, "medium": 16,
+    "large": 18, "x-large": 24, "xx-large": 32,
+}
+_WEIGHT_WORDS = {"normal": 400, "bold": 700, "bolder": 700, "lighter": 400}
+_CSS_RULE_RE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.DOTALL)
+_PROP_RE = re.compile(r"(font-size|font-weight)\s*:\s*([^;!}]+)", re.IGNORECASE)
+
+
+def _css_number(raw: str, parent_fs: float, root_fs: float) -> float | None:
+    raw = (raw or "").strip().lower()
+    word = _SIZE_WORDS.get(raw)
+    if word is not None:
+        return float(word)
+    m = re.match(r"^([\d.]+)(px|rem|em|%)?$", raw)
+    if not m:
+        return None
+    val = float(m.group(1))
+    unit = m.group(2) or "px"
+    if unit == "px":
+        return val
+    if unit == "rem":
+        return val * root_fs
+    if unit == "em":
+        return val * parent_fs
+    if unit == "%":
+        return val * parent_fs / 100.0
+    return None
+
+
+def _weight_number(raw: str) -> int | None:
+    raw = (raw or "").strip().lower()
+    if raw in _WEIGHT_WORDS:
+        return _WEIGHT_WORDS[raw]
+    if re.fullmatch(r"[1-9]00", raw):
+        return int(raw)
+    return None
+
+
+def _load_css_rules(doc: Any) -> list[dict[str, Any]]:
+    """解析内嵌 <style> 中的简单选择器规则(tag / .class / #id / 组合)。"""
+    rules: list[dict[str, Any]] = []
+    for style_el in doc.iter("style"):
+        text = style_el.text or ""
+        for m in _CSS_RULE_RE.finditer(text):
+            selector_raw, decl = m.group(1), m.group(2)
+            for sel in selector_raw.split(","):
+                sel = sel.strip()
+                if not sel or any(ch in sel for ch in (">", "+", "~", "[", ":", "*")):
+                    continue
+                ids = re.findall(r"#([A-Za-z_][\w-]*)", sel)
+                classes = set(re.findall(r"\.([A-Za-z_][\w-]*)", sel))
+                tag_part = re.sub(r"#[A-Za-z_][\w-]*|\.([A-Za-z_][\w-]*)", "", sel).strip()
+                props: dict[str, Any] = {}
+                for pm in _PROP_RE.finditer(decl):
+                    name = pm.group(1).lower()
+                    raw = pm.group(2).strip()
+                    if name == "font-size":
+                        props["size_raw"] = raw
+                    else:
+                        props["weight_raw"] = raw
+                if props:
+                    rules.append(
+                        {
+                            "tag": tag_part.lower() if tag_part else None,
+                            "eid": ids[0] if ids else None,
+                            "classes": frozenset(classes),
+                            "spec": (
+                                1 if ids else 0,
+                                len(classes),
+                                1 if tag_part else 0,
+                            ),
+                            **props,
+                        }
+                    )
+    return rules
+
+
+def _inline_style_raw(el: Any) -> tuple[str | None, str | None]:
+    style = (el.get("style") or "").lower()
+    size = _FONT_SIZE_RE.search(style)
+    weight = _FONT_WEIGHT_RE.search(style)
+    return (size.group(0).split(":", 1)[1].strip() if size else None,
+            weight.group(0).split(":", 1)[1].strip() if weight else None)
+
+
+def _computed_styles(doc: Any, rules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """按文档序 DFS 计算每个元素的 font-size / font-weight(继承生效)。
+
+    注意：lxml 每次访问元素会生成不同 Python 代理对象，因此用稳定的
+    XPath 路径字符串作为键。
+    """
+    root_fs = 16.0
+    memo: dict[str, dict[str, Any]] = {}
+
+    def key(el: Any) -> str:
+        return el.getroottree().getpath(el)
+
+    def best_rule(el: Any, attr: str) -> dict[str, Any] | None:
+        best = None
+        for r in rules:
+            if attr not in r or not _el_matches(el, r):
+                continue
+            if best is None or r["spec"] > best["spec"]:
+                best = r
+        return best
+
+    def resolve(el: Any, parent: dict[str, Any] | None) -> None:
+        inline_s, inline_w = _inline_style_raw(el)
+        rule_s = best_rule(el, "size_raw")
+        rule_w = best_rule(el, "weight_raw")
+        raw_s = inline_s or (rule_s["size_raw"] if rule_s else None)
+        raw_w = inline_w or (rule_w["weight_raw"] if rule_w else None)
+        parent_fs = parent["fs"] if parent else root_fs
+        fs = _css_number(raw_s, parent_fs, root_fs) if raw_s else parent_fs
+        w = _weight_number(raw_w) if raw_w else (parent["w"] if parent else 400)
+        style = {"fs": fs, "w": w}
+        memo[key(el)] = style
+        for child in el.iterchildren():
+            if isinstance(child.tag, str):
+                resolve(child, style)
+
+    resolve(doc, None)
+    return memo
+
+
+def _el_matches(el: Any, rule: dict[str, Any]) -> bool:
+    if rule["tag"] and (el.tag or "").lower() != rule["tag"]:
+        return False
+    if rule["eid"] and (el.get("id") or "") != rule["eid"]:
+        return False
+    if rule["classes"]:
+        cls = set((el.get("class") or "").split())
+        if not rule["classes"].issubset(cls):
+            return False
+    return True
+
+
 def _style_heading_candidates(html: str) -> dict[str, int]:
     """观察原始 DOM，收集“有结构信号”的标题文本 → 建议级别(1..6)。
 
     信号优先级从强到弱：
     1. 语义标签 h1~h6
     2. <strong>/<b> 独占整段的段落
-    3. 内联样式 font-weight: bold / 700+ 或类名含 title/heading
-    4. 内联 font-size 明显大于正文(>=17px 视为小节，>=24px 视为大节)
-    无任何样式的普通短句不会被误判为标题。
+    3. 类名含 title/heading
+    4. 计算后的字号/字重明显大于正文(含内嵌 <style> 类规则与内联样式)
     """
     candidates: dict[str, int] = {}
 
@@ -69,41 +208,55 @@ def _style_heading_candidates(html: str) -> dict[str, int]:
     except Exception:
         return candidates
 
+    rules = _load_css_rules(doc)
+    memo = _computed_styles(doc, rules)
+
+    # 基准字号：body(或首段)的字体大小
+    body = doc.find("body") if doc.tag == "html" else None
+    base_fs = 16.0
+    if body is not None:
+        base_fs = memo.get(body.getroottree().getpath(body), {}).get("fs", 16.0)
+    else:
+        for el in doc.iter("p"):
+            fs = memo.get(el.getroottree().getpath(el), {}).get("fs")
+            if fs:
+                base_fs = fs
+                break
+
     for el in doc.iter():
         tag = el.tag if isinstance(el.tag, str) else ""
         low = tag.lower()
         if low in _HEADING_TAGS:
             add(_full_text(el), _HEADING_TAGS[low])
 
-    # strong/b 独占段落、内联加粗或大字号段落
     for el in doc.iter("p", "div", "section", "li"):
         if not isinstance(el.tag, str):
             continue
         text = _full_text(el)
         if not text:
             continue
-        style = (el.get("style") or "").lower()
+        style_obj = memo.get(el.getroottree().getpath(el), {"fs": base_fs, "w": 400})
+        fs = style_obj.get("fs") or base_fs
+        w = style_obj.get("w") or 400
+        bold = w >= 600
+        rel = fs / base_fs if base_fs else 1.0
         cls = el.get("class") or ""
-        bold = False
-        size = 0.0
-        if _FONT_WEIGHT_RE.search(style):
-            bold = True
-        m = _FONT_SIZE_RE.search(style)
-        if m:
-            size = float(m.group(1))
+
         # 独占 strong/b：整段只有一个 <strong> 且文本一致 → 视为小标题
         strongs = el.xpath(".//strong | .//b")
-        if not bold and not size and strongs:
+        if not bold and rel < 1.3 and strongs:
             if any(_full_text(s) == text for s in strongs):
                 add(text, 2)
                 continue
 
-        if bold or _TITLE_CLASS_RE.search(cls):
-            add(text, 2)
-        elif size >= 24:
+        if bold and rel >= 1.5:
             add(text, 1)
-        elif size >= 17:
+        elif _TITLE_CLASS_RE.search(cls):
             add(text, 2)
+        elif bold and rel >= 1.15:
+            add(text, 2)
+        elif rel >= 1.4:
+            add(text, 1 if rel >= 2.0 else 2)
     return candidates
 
 
@@ -168,13 +321,16 @@ def _is_noise_el(el: Any) -> bool:
     return False
 
 
+_HEADING_LEVEL = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
+
+
 def _backfill_missing(markdown: str, html: str) -> str:
-    """用原始 DOM 找回抽取器漏掉的正文块，并按原顺序插回；剔除噪音。
+    """用原始 DOM 找回抽取器漏掉的正文块/标题，并按原顺序插回；剔除噪音。
 
     思路：
-    1. 把已抽正文按段切分(cleaned)，并在 DOM 里收集正文候选块(<p>/<li>/<pre>…)；
+    1. 把已抽正文按段切分(cleaned)，并在 DOM 里收集候选块(<p>/<li>/<pre>/<h1..h6>…)；
     2. 噪音区(订阅/分享/页脚等)的文本块从正文里剔除；
-    3. 按 DOM 顺序双指针合并：漏块(不在正文中)插入其前后已有内容之间。
+    3. 按 DOM 顺序双指针合并：漏掉的块(含漏掉的语义标题)插回其前后内容之间。
     """
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", markdown) if p.strip()]
     if not paragraphs:
@@ -194,14 +350,14 @@ def _backfill_missing(markdown: str, html: str) -> str:
     if not cleaned:
         cleaned = paragraphs
 
-    # 2) DOM 顺序收集正文候选(排除噪音与过短块)
-    dom_blocks: list[str] = []
-    for el in root.iter("p", "li", "pre", "blockquote"):
+    # 2) DOM 顺序收集候选(排除噪音与过短块)；记录是否为语义标题
+    dom_blocks: list[tuple[str, int]] = []  # (text, level: 0=正文块, 1..6=标题)
+    for el in root.iter("p", "li", "pre", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6"):
         if not isinstance(el.tag, str) or _is_noise_el(el):
             continue
         text = "".join(el.itertext()).strip()
-        if len(_plain_norm(text)) >= 35:
-            dom_blocks.append(text)
+        if len(_plain_norm(text)) >= 35 or (el.tag.lower() in _HEADING_LEVEL and text):
+            dom_blocks.append((text, _HEADING_LEVEL.get(el.tag.lower(), 0)))
 
     # 3) 双指针合并
     segments: list[str] = []
@@ -211,11 +367,11 @@ def _backfill_missing(markdown: str, html: str) -> str:
     def norm_eq(a: str, b: str) -> bool:
         return _plain_norm(a) == _plain_norm(b)
 
-    for dom_text in dom_blocks:
+    for dom_text, level in dom_blocks:
         n = _plain_norm(dom_text)
         if n in used:
             continue
-        # 找到正文中与之相等的段落：从当前指针向后找
+        # 找到正文中与之相等的段落/标题：从当前指针向后找
         found = None
         for i in range(clean_idx, len(cleaned)):
             if norm_eq(cleaned[i], dom_text):
@@ -226,14 +382,15 @@ def _backfill_missing(markdown: str, html: str) -> str:
             clean_idx = found + 1
             used.add(n)
         else:
-            # 可能正文里已包含该句(例如被合并进别的段落)，跳过，避免重复
             already_covered = any(
                 n in _plain_norm(c) and len(_plain_norm(c)) > len(n) for c in cleaned
             )
             if already_covered:
                 continue
-            # 真正漏掉的块：插入当前输出流(位于其前文之后)
-            segments.append(dom_text)
+            if level:
+                segments.append(f"{'#' * level} {dom_text}")
+            else:
+                segments.append(dom_text)
             used.add(n)
 
     # 4) 收尾：把还没输出的正文段接上

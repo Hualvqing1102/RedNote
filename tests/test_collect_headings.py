@@ -62,3 +62,29 @@ def test_no_style_short_lines_untouched():
     result = asyncio.run(collect_url("https://example.com/p", http_client=client))
     lines = result["content"].splitlines()
     assert all(not l.lstrip().startswith("#") for l in lines)
+
+
+def test_css_class_styled_title_promoted():
+    """通过内嵌 <style> 的类规则设置大字号/加粗的段落也应升级为标题。"""
+    page = """<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>c</title>
+<style>
+  .article-title { font-size: 26px; font-weight: 700; }
+  .section-title { font-size: 20px; font-weight: 600; }
+  .body-text { font-size: 14px; }
+</style></head>
+<body><article>
+<p class="article-title">CSS 大标题</p>
+<p class="section-title">CSS 小节标题</p>
+<p class="body-text">这是正文段落。</p>
+<p>另一段正文。</p>
+</article></body></html>"""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    result = asyncio.run(collect_url("https://example.com/css", http_client=client))
+    lines = result["content"].splitlines()
+    assert any(l.startswith("# CSS 大标题") for l in lines)
+    assert any(l.startswith("## CSS 小节标题") for l in lines)
+    assert not any(l.lstrip().startswith("#") for l in lines if "正文段落" in l)
