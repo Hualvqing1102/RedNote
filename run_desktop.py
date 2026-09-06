@@ -43,16 +43,17 @@ class DesktopApi:
     """桌面壳暴露给前端的本地能力(js_api)：
     - choose_file(): 原生文件对话框，返回 {ok, path, name}；
     - open_path(path): 用系统默认程序打开本地文件。
-    """
 
-    def __init__(self) -> None:
-        self.window = None
+    注意：本对象绝不反向持有 window 引用——pywebview 自动暴露 js_api 时会递归
+    遍历对象图，若 api 持有 window 会把整个窗口对象(含 .NET 控件代理)带进遍历，
+    每次 getattr 生成新代理导致无限递归、窗口卡死。取窗口一律用 webview.windows。
+    """
 
     def choose_file(self) -> dict:
         import webview
 
         try:
-            picked = self.window.create_file_dialog(
+            picked = webview.windows[0].create_file_dialog(
                 webview.OPEN_DIALOG,
                 allow_multiple=False,
                 file_types=("文档 (*.pdf;*.docx;*.txt;*.md)",),
@@ -109,7 +110,6 @@ def main() -> int:
         min_size=(980, 640),
         js_api=api,
     )
-    api.window = window
     webview.start()
     server.should_exit = True
     thread.join(timeout=5)
