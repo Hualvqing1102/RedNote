@@ -1594,7 +1594,8 @@ a.btn { text-decoration: none; }
 .calendar-wrap.with-drawer .cal-layout { grid-template-columns: minmax(0, 1fr) 340px; }
 @media (max-width: 1000px) { .calendar-wrap.with-drawer .cal-layout { grid-template-columns: minmax(0, 1fr); } .cal-drawer { position: static; max-height: none; } }
 
-.cal-month { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+.cal-month { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; min-height: 780px; }
+.cal-month .cal-row { flex: 1 1 auto; }
 .cal-weekhead { display: grid; grid-template-columns: repeat(7, 1fr); background: #f1f4ee; border-bottom: 1px solid var(--line); }
 .week-head-cell { padding: 8px 0; text-align: center; font-size: 12px; color: var(--muted); }
 
