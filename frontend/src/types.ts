@@ -17,6 +17,32 @@ export interface Folder {
   note_count: number;
 }
 
+export type EventKind = "schedule" | "todo";
+
+export interface EventItem {
+  id: number;
+  title: string;
+  kind: EventKind;
+  start_ts: number;
+  end_ts: number | null;
+  all_day: boolean;
+  done: boolean;
+  note_id: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface EventInput {
+  title: string;
+  kind: EventKind;
+  start_ts: number;
+  end_ts?: number | null;
+  all_day?: boolean;
+  done?: boolean;
+}
+
+export type EventPatch = Partial<EventInput>;
+
 export interface Note {
   id: number;
   title: string;

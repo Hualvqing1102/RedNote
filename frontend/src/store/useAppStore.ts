@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type View = "collect" | "library" | "note" | "settings";
+export type View = "collect" | "library" | "note" | "settings" | "calendar";
 
 interface AppState {
   view: View;

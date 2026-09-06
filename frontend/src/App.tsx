@@ -1,4 +1,5 @@
 import { useAppStore, type View } from "./store/useAppStore";
+import CalendarView from "./views/CalendarView";
 import CollectView from "./views/CollectView";
 import LibraryView from "./views/LibraryView";
 import NoteView from "./views/NoteView";
@@ -8,6 +9,7 @@ const META: Record<View, { title: string; crumb: string }> = {
   collect: { title: "采集", crumb: "粘贴链接 → 提炼 → 保存" },
   library: { title: "笔记库", crumb: "搜索 · 筛选 · 删除" },
   note: { title: "笔记详情", crumb: "阅读 · 编辑 · 追问" },
+  calendar: { title: "日历", crumb: "日程 · 待办" },
   settings: { title: "设置", crumb: "模型 Provider · API Key · 数据" },
 };
 
@@ -25,6 +27,15 @@ function NavIcon({ name }: { name: View }) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    );
+  }
+  if (name === "calendar") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4.5" width="18" height="16" rx="2" />
+        <path d="M8 2.5v4M16 2.5v4M3 9.5h18" />
+        <path d="M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01" />
       </svg>
     );
   }
@@ -68,6 +79,13 @@ export default function App() {
             <span>笔记库</span>
           </button>
           <button
+            className={`nav-item${view === "calendar" ? " active" : ""}`}
+            onClick={() => setView("calendar")}
+          >
+            <NavIcon name="calendar" />
+            <span>日历</span>
+          </button>
+          <button
             className={`nav-item${view === "settings" ? " active" : ""}`}
             onClick={() => setView("settings")}
           >
@@ -103,6 +121,7 @@ export default function App() {
           {view === "collect" && <CollectView />}
           {view === "library" && <LibraryView />}
           {view === "note" && <NoteView />}
+          {view === "calendar" && <CalendarView />}
           {view === "settings" && <SettingsView />}
         </div>
       </main>

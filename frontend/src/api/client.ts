@@ -1,6 +1,9 @@
 import type {
   CollectResult,
   CommentCard,
+  EventInput,
+  EventItem,
+  EventPatch,
   ExplainResult,
   Folder,
   Note,
@@ -87,6 +90,23 @@ export const api = {
 
   deleteFolder: (id: number): Promise<void> =>
     request(`/api/folders/${id}`, { method: "DELETE" }),
+
+  listEvents: (start: number, end: number): Promise<EventItem[]> => {
+    const qs = new URLSearchParams({
+      start: String(start),
+      end: String(end),
+    });
+    return request(`/api/events?${qs.toString()}`);
+  },
+
+  createEvent: (input: EventInput): Promise<EventItem> =>
+    request("/api/events", { method: "POST", body: JSON.stringify(input) }),
+
+  updateEvent: (id: number, patch: EventPatch): Promise<EventItem> =>
+    request(`/api/events/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+
+  deleteEvent: (id: number): Promise<void> =>
+    request(`/api/events/${id}`, { method: "DELETE" }),
 
   getSettings: (): Promise<SettingsResponse> => request("/api/settings"),
 
