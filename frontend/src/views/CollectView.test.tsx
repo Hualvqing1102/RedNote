@@ -121,6 +121,27 @@ describe("CollectView", () => {
     });
   });
 
+  it("PDF 提取可一键 OCR 重新识别", async () => {
+    vi.mocked(api.collectFile).mockResolvedValue({
+      title: "paper",
+      content: "OCR 版正文",
+      source_url: "",
+      filename: "paper.pdf",
+    });
+    vi.mocked(api.summarize).mockResolvedValue({ title: "paper", summary: "s", points: [] });
+    const { container } = render(<CollectView />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["x"], "paper.pdf", { type: "application/pdf" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+    await screen.findByRole("button", { name: "保存为笔记" });
+
+    fireEvent.click(screen.getByRole("button", { name: /OCR 重新识别/ }));
+    await waitFor(() => {
+      expect(api.collectFile).toHaveBeenLastCalledWith(file, true);
+    });
+  });
+
   it("不支持的文件类型直接提示，不发请求", async () => {
     const { container } = render(<CollectView />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

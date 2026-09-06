@@ -25,8 +25,15 @@ class FileParseError(Exception):
 # ---------------------------------------------------------------- 入口
 
 
-def parse_bytes(filename: str | None, data: bytes) -> dict[str, Any]:
-    """按扩展名解析上传内容，返回与网页采集一致的 {title, content, source_url}。"""
+def parse_bytes(
+    filename: str | None,
+    data: bytes,
+    force_ocr: bool = False,
+) -> dict[str, Any]:
+    """按扩展名解析上传内容，返回与网页采集一致的 {title, content, source_url}。
+
+    force_ocr=True 时跳过文字层，PDF 直接走 OCR（用于提取结果乱码后的手动重试）。
+    """
     name = (filename or "未命名").strip() or "未命名"
     ext = Path(name).suffix.lower()
     if ext == ".txt" or ext == ".md":
@@ -34,7 +41,7 @@ def parse_bytes(filename: str | None, data: bytes) -> dict[str, Any]:
     elif ext == ".docx":
         content = _parse_docx(data)
     elif ext == ".pdf":
-        content = _parse_pdf(data)
+        content = _parse_pdf(data, force_ocr=force_ocr)
     else:
         raise FileParseError(f"暂不支持「{ext or '未知'}」格式：请使用 PDF / DOCX / TXT / Markdown")
     content = _clean(content)
@@ -66,7 +73,9 @@ def _decode_text(data: bytes) -> str:
 
 
 def _clean(text: str) -> str:
-    lines = [ln.rstrip() for ln in (text or "").splitlines()]
+    # 去掉替换符/空字符等明显坏字符
+    text = "".join(ch for ch in (text or "") if ch not in ("\ufffd", "\x00") and ord(ch) not in (0xFFFD,))
+    lines = [ln.rstrip() for ln in text.splitlines()]
     out: list[str] = []
     blank = 0
     for ln in lines:
@@ -78,6 +87,24 @@ def _clean(text: str) -> str:
             blank = 0
         out.append(ln)
     return "\n".join(out).strip()
+
+
+def _looks_garbled(text: str) -> bool:
+    """按字符质量判断 PDF 文字层是否乱码(常见于字体缺 ToUnicode 映射)。
+
+    特征：Unicode 替换符 \ufffd、控制/私用区字符(PUA，字形乱码的典型)。
+    长度判定(过短走 OCR)由调用方 _parse_pdf 单独处理。
+    """
+    probe = (text or "").strip()[:4000]
+    if not probe:
+        return False
+    n = len(probe)
+    bad = 0
+    for ch in probe:
+        code = ord(ch)
+        if ch == "\ufffd" or 0xE000 <= code <= 0xF8FF or code in (0x00, 0x01) or 0xFFF0 <= code <= 0xFFFF:
+            bad += 1
+    return bad / n > 0.03
 
 
 # ---------------------------------------------------------------- DOCX
@@ -110,7 +137,7 @@ def _parse_docx(data: bytes) -> str:
 # ---------------------------------------------------------------- PDF
 
 
-def _parse_pdf(data: bytes) -> str:
+def _parse_pdf(data: bytes, force_ocr: bool = False) -> str:
     try:
         import fitz  # PyMuPDF
     except ImportError as exc:  # pragma: no cover
@@ -122,9 +149,13 @@ def _parse_pdf(data: bytes) -> str:
     try:
         if doc.page_count == 0:
             raise FileParseError("PDF 没有任何页面")
-        text = "\n\n".join((page.get_text("text") or "").strip() for page in doc)
-        if len(text.strip()) < TEXT_PAGE_MIN:
+        if force_ocr:
             text = _ocr_pdf(doc)
+        else:
+            text = "\n\n".join((page.get_text("text") or "").strip() for page in doc)
+            # 提取过短或疑似乱码 → 改走 OCR，避免把乱码当正文
+            if len(text.strip()) < TEXT_PAGE_MIN or _looks_garbled(text):
+                text = _ocr_pdf(doc)
         return text
     finally:
         doc.close()

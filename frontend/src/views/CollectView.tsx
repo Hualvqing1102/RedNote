@@ -45,6 +45,14 @@ export default function CollectView() {
   const [explainMode, setExplainMode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 最近一次导入的本地文件信息(便于“打开本地文件/OCR 重试”)
+  const [fileInfo, setFileInfo] = useState<{ name: string; path?: string; isPdf: boolean; file?: File } | null>(null);
+
+  /** 桌面版(pywebview)注入的本地能力；浏览器环境没有 */
+  function bridge(): { choose_file: () => Promise<unknown>; open_path: (p: string) => Promise<unknown> } | undefined {
+    const anyWin = window as unknown as { pywebview?: { api?: never } };
+    return (anyWin.pywebview?.api as never) as { choose_file: () => Promise<unknown>; open_path: (p: string) => Promise<unknown> } | undefined;
+  }
 
   async function start() {
     const target = url.trim();
@@ -103,12 +111,70 @@ export default function CollectView() {
     }
     setError("");
     setDraft(null);
+    setFileInfo({ name: file.name, isPdf: ext === "pdf", file });
     try {
       const collect = await api.collectFile(file);
       await processCollect(collect);
     } catch (e) {
       setError(e instanceof Error ? e.message : "解析文档失败");
       setPhase(0);
+    }
+  }
+
+  /** 桌面版：用原生文件对话框选择，能拿到本地路径以便“打开本地文件”。 */
+  async function chooseDesktopFile() {
+    const b = bridge();
+    if (!b) return;
+    setError("");
+    try {
+      const res = (await b.choose_file()) as { ok?: boolean; cancelled?: boolean; path?: string; name?: string; error?: string };
+      if (!res || !res.ok) {
+        if (res && !res.cancelled) setError(res.error || "无法选择文件");
+        return;
+      }
+      const ext = (res.name ?? "").split(".").pop()?.toLowerCase() ?? "";
+      if (!FILE_EXTS.includes(ext)) {
+        setError(`暂不支持「${res.name}」：请使用 PDF / DOCX / TXT / Markdown`);
+        return;
+      }
+      setDraft(null);
+      setFileInfo({ name: res.name ?? "", path: res.path, isPdf: ext === "pdf" });
+      try {
+        const collect = await api.collectFilePath(res.path as string);
+        await processCollect(collect);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "读取文档失败");
+        setPhase(0);
+      }
+    } catch {
+      setError("无法打开文件选择对话框");
+    }
+  }
+
+  /** 提取结果乱码/排版乱时，用 OCR 重新识别(仅 PDF)。 */
+  async function reOcr() {
+    if (!fileInfo?.isPdf) return;
+    setError("");
+    setDraft(null);
+    try {
+      const collect = fileInfo.path
+        ? await api.collectFilePath(fileInfo.path, true)
+        : await api.collectFile(fileInfo.file as File, true);
+      await processCollect(collect);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "OCR 识别失败");
+      setPhase(0);
+    }
+  }
+
+  async function openLocal() {
+    const b = bridge();
+    if (!b || !fileInfo?.path) return;
+    try {
+      const r = (await b.open_path(fileInfo.path)) as { ok?: boolean; error?: string };
+      if (r && !r.ok) setError(r.error || "打开本地文件失败");
+    } catch {
+      setError("无法打开本地文件");
     }
   }
 
@@ -159,6 +225,7 @@ export default function CollectView() {
     setPhase(0);
     setError("");
     setUrl("");
+    setFileInfo(null);
   }
 
   const busy = phase >= 1 && phase <= 3;
@@ -184,11 +251,21 @@ export default function CollectView() {
         role="button"
         tabIndex={0}
         aria-label="上传本地文档"
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => {
+          if (bridge()) {
+            chooseDesktopFile();
+          } else {
+            fileInputRef.current?.click();
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            fileInputRef.current?.click();
+            if (bridge()) {
+              chooseDesktopFile();
+            } else {
+              fileInputRef.current?.click();
+            }
           }
         }}
         onDragOver={(e) => {
@@ -300,11 +377,30 @@ export default function CollectView() {
               </div>
               <div className="panel-body article">
                 <h3>{draft.collect.title}</h3>
-                <div className="src">
-                  {draft.collect.filename
-                    ? `📄 ${draft.collect.filename}`
-                    : draft.collect.source_url}
-                </div>
+                {draft.collect.filename && fileInfo ? (
+                  <div className="file-meta">
+                    <span className="src">📄 {draft.collect.filename}</span>
+                    <span className="file-btns">
+                      {fileInfo.path && (
+                        <button className="btn btn-ghost btn-sm" onClick={openLocal}>
+                          打开本地文件
+                        </button>
+                      )}
+                      {fileInfo.isPdf && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={reOcr}
+                          disabled={busy || saving}
+                          title="文字层提取出现乱码时，可改用 OCR 重新识别"
+                        >
+                          OCR 重新识别
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="src">{draft.collect.source_url}</div>
+                )}
                 {explainMode && draft.explanation ? (
                   renderBlocks(draft.explanation.explanation)
                 ) : (

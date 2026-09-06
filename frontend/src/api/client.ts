@@ -44,11 +44,18 @@ export const api = {
   collectUrl: (url: string): Promise<CollectResult> =>
     request("/api/collect", { method: "POST", body: JSON.stringify({ url }) }),
 
-  collectFile: (file: File): Promise<CollectResult> => {
+  collectFile: (file: File, forceOcr = false): Promise<CollectResult> => {
     const fd = new FormData();
     fd.append("file", file, file.name);
+    if (forceOcr) fd.append("force_ocr", "1");
     return request("/api/collect/file", { method: "POST", body: fd });
   },
+
+  collectFilePath: (path: string, forceOcr = false): Promise<CollectResult> =>
+    request("/api/collect/filepath", {
+      method: "POST",
+      body: JSON.stringify({ path, force_ocr: forceOcr }),
+    }),
 
   summarize: (title: string, content: string): Promise<Summary> =>
     request("/api/agent/summarize", {

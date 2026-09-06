@@ -104,3 +104,52 @@ def test_upload_empty_text_rejected(client):
     resp = client.post("/api/collect/file", files={"file": ("empty.txt", b"   \n  ", "text/plain")})
     assert resp.status_code == 400
     assert "未提取到文字" in resp.json()["detail"]
+
+
+def test_garbled_detection_heuristic():
+    assert fileparse._looks_garbled("\ue000\ue001\ue002\ue003" * 40) is True
+    assert fileparse._looks_garbled("\ufffd" * 30 + "abc") is True
+    assert fileparse._looks_garbled("normal English sentence with attention mechanism") is False
+    assert fileparse._looks_garbled("注意力机制 是 深度学习 的 核心 概念") is False
+    assert fileparse._looks_garbled("") is False
+
+
+def test_force_ocr_skips_text_layer(client, monkeypatch):
+    import fitz
+
+    def fake_ocr(doc):
+        return "FORCED OCR output"
+
+    monkeypatch.setattr(fileparse, "_ocr_pdf", fake_ocr)
+    buf = io.BytesIO()
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "there is a real text layer here")
+    doc.save(buf)
+    resp = client.post(
+        "/api/collect/file",
+        files={"file": ("texty.pdf", buf.getvalue(), "application/pdf")},
+        data={"force_ocr": "1"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "FORCED OCR output"
+
+
+def test_filepath_endpoint_requires_desktop_env(client, tmp_path):
+    target = tmp_path / "sample.txt"
+    target.write_text("桌面路径读取测试", encoding="utf-8")
+    assert client.post("/api/collect/filepath", json={"path": str(target)}).status_code == 403
+
+
+def test_filepath_endpoint_reads_local_file(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("REDNOTE_DESKTOP", "1")
+    target = tmp_path / "sample.txt"
+    target.write_text("桌面路径读取测试", encoding="utf-8")
+    resp = client.post("/api/collect/filepath", json={"path": str(target)})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["title"] == "sample"
+    assert "桌面路径读取测试" in body["content"]
+    # 不存在文件给出友好错误
+    resp = client.post("/api/collect/filepath", json={"path": str(tmp_path / "nope.pdf")})
+    assert resp.status_code == 400

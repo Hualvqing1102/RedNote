@@ -1,10 +1,12 @@
 """FastAPI 应用与路由。"""
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +30,12 @@ from app.services.collect import CollectError
 
 class CollectIn(BaseModel):
     url: str
+
+
+class CollectFilePathIn(BaseModel):
+    """桌面版专用：直接读取本机路径上的文档(由 run_desktop 标记环境后开放)。"""
+    path: str
+    force_ocr: bool = False
 
 
 class SummarizeIn(BaseModel):
@@ -199,14 +207,37 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/collect/file")
-    async def collect_file(file: UploadFile = File(...)) -> dict[str, Any]:
+    async def collect_file(
+        file: UploadFile = File(...),
+        force_ocr: str = Form("0"),
+    ) -> dict[str, Any]:
         """拖拽导入本地文档：PDF / DOCX / TXT / Markdown(扫描件自动 OCR)。"""
         from app.services import fileparse
 
         data = await file.read()
         try:
             fileparse.check_size(len(data))
-            return fileparse.parse_bytes(file.filename, data)
+            return fileparse.parse_bytes(file.filename, data, force_ocr=force_ocr.lower() in ("1", "true"))
+        except fileparse.FileParseError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/collect/filepath")
+    async def collect_filepath(payload: CollectFilePathIn) -> dict[str, Any]:
+        """桌面版专用：读取本机路径上的文件(原生对话框选择)，供“打开本地文件/OCR重试”使用。"""
+        from app.services import fileparse
+
+        if os.getenv("REDNOTE_DESKTOP") != "1":
+            raise HTTPException(status_code=403, detail="该接口仅在桌面版可用")
+        path = Path(payload.path).expanduser()
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail="找不到该文件（可能已被移动或删除）") from exc
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"无法读取文件：{exc}") from exc
+        try:
+            fileparse.check_size(len(data))
+            return fileparse.parse_bytes(path.name, data, force_ocr=payload.force_ocr)
         except fileparse.FileParseError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

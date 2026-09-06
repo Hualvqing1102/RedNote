@@ -302,6 +302,16 @@ textarea {
   flex: 1;
   border-top: 1px solid var(--line);
 }
+.file-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.file-meta .src { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-btns { display: inline-flex; gap: 6px; margin-left: auto; }
 .urlbar {
   display: flex;
   gap: 10px;

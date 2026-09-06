@@ -39,7 +39,42 @@ def _wait_ready(url: str, timeout: float = 40.0) -> None:
     raise RuntimeError(f"本地服务启动超时：{last_error}")
 
 
+class DesktopApi:
+    """桌面壳暴露给前端的本地能力(js_api)：
+    - choose_file(): 原生文件对话框，返回 {ok, path, name}；
+    - open_path(path): 用系统默认程序打开本地文件。
+    """
+
+    def __init__(self) -> None:
+        self.window = None
+
+    def choose_file(self) -> dict:
+        import webview
+
+        try:
+            picked = self.window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=("文档 (*.pdf;*.docx;*.txt;*.md)",),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+        if not picked:
+            return {"ok": False, "cancelled": True}
+        path = picked[0] if isinstance(picked, (list, tuple)) else picked
+        return {"ok": True, "path": str(path), "name": os.path.basename(str(path))}
+
+    def open_path(self, path: str) -> dict:
+        try:
+            os.startfile(path)
+            return {"ok": True}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+
+
 def main() -> int:
+    # 桌面运行标记：开放“读取本机文件路径”这类仅桌面可用的接口
+    os.environ["REDNOTE_DESKTOP"] = "1"
     if getattr(sys, "frozen", False):
         # exe 运行时默认把数据放在用户目录，避免写在安装位置不可写
         if not os.getenv("REDNOTE_DATA_DIR"):
@@ -65,13 +100,16 @@ def main() -> int:
     url = f"http://127.0.0.1:{port}"
     _wait_ready(url)
 
+    api = DesktopApi()
     window = webview.create_window(
         "RedNote 学习笔记",
         url=url,
         width=1280,
         height=860,
         min_size=(980, 640),
+        js_api=api,
     )
+    api.window = window
     webview.start()
     server.should_exit = True
     thread.join(timeout=5)
