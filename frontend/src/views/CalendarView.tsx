@@ -317,7 +317,7 @@ export default function CalendarView() {
                       {timed.map((ev) => {
                         const t = tsToDate(ev.start_ts);
                         const mins = t.getHours() * 60 + t.getMinutes();
-                        const top = (mins / 60) * PX_PER_HOUR + 10; // +头部空间
+                        const top = (mins / 60) * PX_PER_HOUR;
                         const endMins = ev.end_ts ? (() => {
                           const e = tsToDate(ev.end_ts);
                           return e.getHours() * 60 + e.getMinutes();
@@ -379,7 +379,7 @@ export default function CalendarView() {
               <div className="kind-tabs">
                 {([["schedule", "日程"], ["todo", "待办"]] as const).map(([val, label]) => (
                   <button key={val} className={`kind-tab${form.kind === val ? " active" : ""}`}
-                    onClick={() => setForm({ ...form, kind: val, allDay: val === "todo" ? true : form.allDay })}>
+                    onClick={() => setForm({ ...form, kind: val, allDay: val === "todo" })}>
                     {label}
                   </button>
                 ))}
