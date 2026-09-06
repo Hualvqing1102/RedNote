@@ -73,14 +73,15 @@ function formFromEvent(ev: EventItem): FormState {
 }
 function formToInput(f: FormState, day: Date): EventInput {
   const [y, m, dayN] = [day.getFullYear(), day.getMonth(), day.getDate()];
-  let start = epoch(day);
+  const localTs = (d: Date) => Math.floor(d.getTime() / 1000);
+  let start = epoch(day); // 全天/待办：当天 00:00
   let end: number | undefined;
   if (f.kind === "schedule" && !f.allDay) {
     const [hh, mm] = f.startTime.split(":").map(Number);
-    start = epoch(new Date(y, m, dayN, hh, mm));
+    start = localTs(new Date(y, m, dayN, hh, mm));
     if (f.endTime) {
       const [eh, em] = f.endTime.split(":").map(Number);
-      end = epoch(new Date(y, m, dayN, eh, em));
+      end = localTs(new Date(y, m, dayN, eh, em));
     }
   }
   return {
