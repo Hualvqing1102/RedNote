@@ -8,8 +8,7 @@ function renderBlocksToDom(md: string): HTMLElement {
 }
 
 describe("renderBlocks", () => {
-  it("把 #~###### 标题映射为 h3~h6(不与页面主标题冲突)", () => {
-    const dom = renderBlocksToDom("# 一级\n\n## 二级\n\n### 三级\n\n#### 四级");
+  it("把 #~###### 标题映射为 h3~h6(不与页面主标题冲突)", () => {    const dom = renderBlocksToDom("# 一级\n\n## 二级\n\n### 三级\n\n#### 四级");
     expect(dom.querySelector("h3")?.textContent).toBe("一级");
     expect(dom.querySelector("h4")?.textContent).toBe("二级");
     expect(dom.querySelector("h5")?.textContent).toBe("三级");
@@ -94,6 +93,24 @@ describe("renderBlocks", () => {
     const dom = renderBlocksToDom("> 一句引用\n\n正文\n\n---");
     expect(dom.querySelector("blockquote")?.textContent).toBe("一句引用");
     expect(dom.querySelector("hr")).not.toBeNull();
+  });
+
+  it("危险协议的链接不渲染为可点击链接", () => {
+    const dom = renderBlocksToDom("看这里 [点我](javascript:alert(1)) 结束");
+    expect(dom.querySelector("a")).toBeNull();
+    expect(dom.textContent).toContain("点我");
+  });
+
+  it("站内链接与 mailto 仍正常渲染", () => {
+    const dom = renderBlocksToDom("[笔记](/notes/1) 和 [联系](mailto:a@b.com)");
+    expect(dom.querySelector('a[href="/notes/1"]')).not.toBeNull();
+    expect(dom.querySelector('a[href="mailto:a@b.com"]')).not.toBeNull();
+  });
+
+  it("危险协议的图片被丢弃，只显示说明文字", () => {
+    const dom = renderBlocksToDom("![坏图](javascript:alert(1))");
+    expect(dom.querySelector("img")).toBeNull();
+    expect(dom.textContent).toContain("坏图");
   });
 });
 

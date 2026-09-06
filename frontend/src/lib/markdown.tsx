@@ -20,6 +20,24 @@ type Inline =
 const INLINE_TOKEN_RE =
   /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|!\[[^\]]*\]\([^)\s]+\)|\[[^\]]+\]\([^)\s]+\))/g;
 
+/** 链接白名单：http(s)/mailto、站内相对路径、锚点；其余(如 javascript:、data:text/html)一律丢弃。 */
+function safeHref(raw: string): string {
+  const t = (raw || "").trim();
+  if (!t) return "";
+  if (/^(https?:|mailto:)/i.test(t)) return t;
+  if (t.startsWith("/") || t.startsWith("#")) return t;
+  return "";
+}
+
+/** 图片白名单：http(s)、data:image 及站内相对路径。 */
+function safeImageSrc(raw: string): string {
+  const t = (raw || "").trim();
+  if (!t) return "";
+  if (/^(https?:|data:image\/)/i.test(t)) return t;
+  if (t.startsWith("/")) return t;
+  return "";
+}
+
 function splitInline(text: string): Inline[] {
   return text
     .split(INLINE_TOKEN_RE)
@@ -59,23 +77,35 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
         return <strong key={key}>{renderInline(it.text, key)}</strong>;
       case "italic":
         return <em key={key}>{renderInline(it.text, key)}</em>;
-      case "image":
+      case "image": {
+        const src = safeImageSrc(it.src);
+        if (!src) {
+          // 危险的图片地址直接丢弃，只展示可读文本
+          return <span key={key}>{it.text}</span>;
+        }
         return (
           <img
             key={key}
             className="md-img-inline"
-            src={it.src}
+            src={src}
             alt={it.text}
             loading="lazy"
             referrerPolicy="no-referrer"
           />
         );
-      case "link":
+      }
+      case "link": {
+        const href = safeHref(it.src);
+        if (!href) {
+          // javascript:/data: 等危险协议不渲染为可点击链接
+          return <span key={key}>{it.text}</span>;
+        }
         return (
-          <a key={key} href={it.src} target="_blank" rel="noreferrer">
+          <a key={key} href={href} target="_blank" rel="noreferrer">
             {it.text}
           </a>
         );
+      }
       default:
         return <span key={key}>{it.text.replace(/\s*\n\s*/g, " ")}</span>;
     }
