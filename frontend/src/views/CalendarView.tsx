@@ -40,6 +40,41 @@ function timeOf(d: Date): string {
 function tsToDate(ts: number): Date {
   return new Date(ts * 1000);
 }
+
+/** 同一天内、时间重叠的日程分配“泳道”，返回每条的泳道号与当日最大并发数。 */
+function layoutLanes(items: EventItem[]): { placed: { item: EventItem; lane: number }[]; max: number } {
+  const sorted = [...items].sort((a, b) => a.start_ts - b.start_ts);
+  const intervals = sorted.map((ev) => ({
+    ev,
+    s: ev.start_ts,
+    e: ev.end_ts ?? ev.start_ts + 3600,
+  }));
+  // 最大并发
+  const events: [number, number][] = [];
+  for (const it of intervals) {
+    events.push([it.s, 1], [it.e, -1]);
+  }
+  events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let cur = 0;
+  let max = 1;
+  for (const [, d] of events) {
+    cur += d;
+    max = Math.max(max, cur);
+  }
+  // 贪心泳道分配
+  const laneEnds: number[] = [];
+  const placed = intervals.map((it) => {
+    let lane = laneEnds.findIndex((e) => e <= it.s);
+    if (lane === -1) {
+      laneEnds.push(it.e);
+      lane = laneEnds.length - 1;
+    } else {
+      laneEnds[lane] = it.e;
+    }
+    return { item: it.ev, lane };
+  });
+  return { placed, max: Math.max(max, 1) };
+}
 function fmtDayTitle(d: Date): string {
   const weeks = ["日", "一", "二", "三", "四", "五", "六"];
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 · 周${weeks[d.getDay()]}`;
@@ -156,11 +191,34 @@ export default function CalendarView() {
   function nav(dir: number) {
     setAnchor((a) => (mode === "month" ? addMonths(a, dir) : addDays(a, dir * 7)));
   }
-  function openDayDrawer(date: Date, event?: EventItem) {
+  function openDayDrawer(date: Date, event?: EventItem, prefillTime?: string) {
     setOpenDay(date);
-    setForm(event ? formFromEvent(event) : blankForm());
+    if (event) {
+      setForm(formFromEvent(event));
+    } else {
+      const base = blankForm();
+      if (prefillTime) {
+        const [hh, mm] = prefillTime.split(":").map(Number);
+        const end = mm + 60 >= 60 ? pad((hh + 1) % 24) + ":" + pad(mm) : prefillTime;
+        base.startTime = prefillTime;
+        base.endTime = end;
+        base.kind = "schedule";
+        base.allDay = false;
+      }
+      setForm(base);
+    }
     setEditingId(event?.id ?? null);
   }
+
+  function openNewAt(date: Date, clientY: number, el: HTMLElement) {
+    const rect = el.getBoundingClientRect();
+    const y = clientY - rect.top;
+    const mins = Math.max(0, Math.min(23 * 60 + 55, Math.round((y / PX_PER_HOUR) * 60 / 5) * 5));
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    openDayDrawer(date, undefined, `${pad(hh)}:${pad(mm)}`);
+  }
+
   function resetFormFor(date: Date) {
     setOpenDay(date);
     setEditingId(null);
@@ -297,6 +355,7 @@ export default function CalendarView() {
                 const items = byDay.get(key) ?? [];
                 const timed = items.filter((ev) => ev.kind === "schedule" && !ev.all_day);
                 const others = items.filter((ev) => !(ev.kind === "schedule" && !ev.all_day));
+                const { placed, max } = layoutLanes(timed);
                 return (
                   <div
                     key={i}
@@ -304,7 +363,10 @@ export default function CalendarView() {
                     onClick={() => resetFormFor(d)}
                   >
                     <div className="week-col-head"><span>{WEEK_LABELS[i]}</span></div>
-                    <div className="week-gridlines">
+                    <div
+                      className="week-gridlines"
+                      onClick={(e) => { e.stopPropagation(); openNewAt(d, e.clientY, e.currentTarget); }}
+                    >
                       {Array.from({ length: 25 }, (_, h) => (h % 3 === 0 ? <i key={h} style={{ top: h * PX_PER_HOUR }} /> : null))}
                       {others.map((ev) => (
                         <button
@@ -315,7 +377,7 @@ export default function CalendarView() {
                           {ev.title}
                         </button>
                       ))}
-                      {timed.map((ev) => {
+                      {placed.map(({ item: ev, lane }) => {
                         const t = tsToDate(ev.start_ts);
                         const mins = t.getHours() * 60 + t.getMinutes();
                         const top = (mins / 60) * PX_PER_HOUR;
@@ -324,11 +386,14 @@ export default function CalendarView() {
                           return e.getHours() * 60 + e.getMinutes();
                         })() : mins + 60;
                         const height = Math.max(44, ((endMins - mins) / 60) * PX_PER_HOUR);
+                        const laneWidth = max > 1
+                          ? { left: `calc(${(lane / max) * 100}% + 3px)`, width: `calc(${100 / max}% - 6px)` }
+                          : { left: 4, width: `calc(100% - 8px)` };
                         return (
                           <button
                             key={ev.id}
                             className={`ev-block ev-${ev.color}${ev.done ? " done" : ""}`}
-                            style={{ top, height }}
+                            style={{ top, height, ...laneWidth }}
                             onClick={(e) => { e.stopPropagation(); openDayDrawer(d, ev); }}
                           >
                             <span className="ev-time">{timeOf(t)}</span>

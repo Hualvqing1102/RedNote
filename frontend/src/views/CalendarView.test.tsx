@@ -90,4 +90,28 @@ describe("CalendarView", () => {
     fireEvent.click(screen.getByRole("button", { name: "周" }));
     expect(await screen.findByText("周会")).toBeInTheDocument();
   });
+
+  it("周视图同一时间段的日程分配泳道、左右挤排显示", async () => {
+    const a = makeEvent({ id: 1, title: "会议A", start_ts: startOfToday() + 3600, end_ts: startOfToday() + 7200 });
+    const b = makeEvent({ id: 2, title: "会议B", start_ts: startOfToday() + 5400, end_ts: startOfToday() + 7200 });
+    vi.mocked(api.listEvents).mockReset().mockResolvedValue([a, b]);
+    const { container } = render(<CalendarView />);
+    await screen.findByText("会议A");
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+
+    const blocks = () => Array.from(container.querySelectorAll(".ev-block")) as HTMLElement[];
+    await waitFor(() => expect(blocks().length).toBe(2));
+    const widths = blocks().map((el) => el.style.width);
+    expect(widths).toEqual(["calc(50% - 6px)", "calc(50% - 6px)"]);
+  });
+
+  it("周视图点击时间栏即预填该时间新建日程", async () => {
+    render(<CalendarView />);
+    await screen.findByText("周会");
+    fireEvent.click(screen.getByRole("button", { name: "周" }));
+    const grid = document.querySelectorAll(".week-gridlines")[0] as HTMLElement;
+    fireEvent.click(grid, { clientY: 90 });
+    const start = await screen.findByLabelText("开始时间");
+    expect((start as HTMLInputElement).value).toBe("03:00");
+  });
 });
