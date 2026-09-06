@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import type { EventInput, EventItem, EventKind } from "../types";
+import type { EventColor, EventInput, EventItem, EventKind } from "../types";
 
 const WEEK_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
-const pad = (n: number) => String(n).padStart(2, "0");
+export const EVENT_COLORS: { id: EventColor; label: string }[] = [
+  { id: "green", label: "绿" },
+  { id: "blue", label: "蓝" },
+  { id: "yellow", label: "黄" },
+  { id: "pink", label: "粉" },
+  { id: "purple", label: "紫" },
+];
+const PX_PER_HOUR = 30;
 
+const pad = (n: number) => String(n).padStart(2, "0");
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -26,65 +34,64 @@ function epoch(d: Date): number {
 function dateKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-function dateInput(d: Date): string {
-  return dateKey(d);
-}
 function timeOf(d: Date): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function tsToDate(ts: number): Date {
   return new Date(ts * 1000);
 }
-function fmtRange(ts: number): string {
-  const d = tsToDate(ts);
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+function fmtDayTitle(d: Date): string {
+  const weeks = ["日", "一", "二", "三", "四", "五", "六"];
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 · 周${weeks[d.getDay()]}`;
 }
 
-interface DraftState {
-  date: string;
-  kind: EventKind;
+interface FormState {
   title: string;
+  kind: EventKind;
+  color: EventColor;
   allDay: boolean;
   startTime: string;
   endTime: string;
   done: boolean;
 }
-
 type CalMode = "month" | "week";
 
-function buildDraft(date: Date): DraftState {
+function blankForm(): FormState {
+  return { title: "", kind: "schedule", color: "green", allDay: false, startTime: "09:00", endTime: "10:00", done: false };
+}
+function formFromEvent(ev: EventItem): FormState {
+  const d = tsToDate(ev.start_ts);
   return {
-    date: dateInput(date),
-    kind: "schedule",
-    title: "",
-    allDay: false,
-    startTime: "09:00",
-    endTime: "10:00",
-    done: false,
+    title: ev.title,
+    kind: ev.kind,
+    color: ev.color,
+    allDay: ev.all_day,
+    startTime: timeOf(d),
+    endTime: ev.end_ts ? timeOf(tsToDate(ev.end_ts)) : "",
+    done: ev.done,
   };
 }
-
-function draftToInput(d: DraftState, base: number | null): EventInput {
-  const [y, m, day] = d.date.split("-").map(Number);
-  const dayStart = new Date(y, m - 1, day);
-  let start = epoch(dayStart);
-  if (d.kind === "schedule" && !d.allDay) {
-    const [h, min] = d.startTime.split(":").map(Number);
-    start = epoch(new Date(y, m - 1, day, h, min));
+function formToInput(f: FormState, day: Date): EventInput {
+  const [y, m, dayN] = [day.getFullYear(), day.getMonth(), day.getDate()];
+  let start = epoch(day);
+  let end: number | undefined;
+  if (f.kind === "schedule" && !f.allDay) {
+    const [hh, mm] = f.startTime.split(":").map(Number);
+    start = epoch(new Date(y, m, dayN, hh, mm));
+    if (f.endTime) {
+      const [eh, em] = f.endTime.split(":").map(Number);
+      end = epoch(new Date(y, m, dayN, eh, em));
+    }
   }
-  const input: EventInput = {
-    title: d.title.trim(),
-    kind: d.kind,
+  return {
+    title: f.title.trim(),
+    kind: f.kind,
+    color: f.color,
     start_ts: start,
-    all_day: d.allDay || d.kind === "todo",
-    done: d.done,
+    end_ts: f.kind === "todo" || f.allDay ? null : end ?? null,
+    all_day: f.kind === "todo" || f.allDay,
+    done: f.done,
   };
-  if (d.kind === "schedule" && !d.allDay && d.endTime && d.endTime >= d.startTime) {
-    const [eh, emin] = d.endTime.split(":").map(Number);
-    input.end_ts = epoch(new Date(y, m - 1, day, eh, emin));
-  }
-  void base;
-  return input;
 }
 
 export default function CalendarView() {
@@ -93,11 +100,11 @@ export default function CalendarView() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [draft, setDraft] = useState<DraftState | null>(null);
+  // 右侧面板：openDay 非空时显示
+  const [openDay, setOpenDay] = useState<Date | null>(null);
+  const [form, setForm] = useState<FormState>(blankForm());
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const todayKey = dateKey(new Date());
 
   const cells = useMemo(() => {
     if (mode === "month") {
@@ -118,7 +125,10 @@ export default function CalendarView() {
       map.set(k, list);
     }
     for (const list of map.values()) {
-      list.sort((a, b) => (a.done === b.done ? a.start_ts - b.start_ts : a.done ? 1 : -1));
+      list.sort((a, b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        return a.start_ts - b.start_ts;
+      });
     }
     return map;
   }, [events]);
@@ -145,44 +155,32 @@ export default function CalendarView() {
   function nav(dir: number) {
     setAnchor((a) => (mode === "month" ? addMonths(a, dir) : addDays(a, dir * 7)));
   }
-
-  function openCreate(date: Date) {
+  function openDayDrawer(date: Date, event?: EventItem) {
+    setOpenDay(date);
+    setForm(event ? formFromEvent(event) : blankForm());
+    setEditingId(event?.id ?? null);
+  }
+  function resetFormFor(date: Date) {
+    setOpenDay(date);
     setEditingId(null);
-    setDraft(buildDraft(date));
+    setForm(blankForm());
+    setError("");
   }
 
-  function openEdit(ev: EventItem) {
-    const d = tsToDate(ev.start_ts);
-    const draftState: DraftState = {
-      date: dateInput(d),
-      kind: ev.kind,
-      title: ev.title,
-      allDay: ev.all_day,
-      startTime: timeOf(d),
-      endTime: ev.end_ts ? timeOf(tsToDate(ev.end_ts)) : "",
-      done: ev.done,
-    };
-    if (ev.kind === "todo") draftState.allDay = true;
-    setEditingId(ev.id);
-    setDraft(draftState);
-  }
-
-  async function save() {
-    if (!draft) return;
-    if (!draft.title.trim()) {
+  async function saveForm() {
+    if (!openDay) return;
+    if (!form.title.trim()) {
       setError("请填写标题");
       return;
     }
     setSaving(true);
     setError("");
     try {
-      if (editingId !== null) {
-        await api.updateEvent(editingId, draftToInput(draft, editingId));
-      } else {
-        await api.createEvent(draftToInput(draft, null));
-      }
-      setDraft(null);
+      const input = formToInput(form, openDay);
+      if (editingId !== null) await api.updateEvent(editingId, input);
+      else await api.createEvent(input);
       setEditingId(null);
+      setForm(blankForm());
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存失败");
@@ -195,268 +193,248 @@ export default function CalendarView() {
     if (!window.confirm("确定删除这条事项吗？")) return;
     try {
       await api.deleteEvent(id);
-      setDraft(null);
       setEditingId(null);
+      setForm(blankForm());
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除失败");
     }
   }
 
+  async function toggleDone(ev: EventItem) {
+    try {
+      await api.updateEvent(ev.id, { done: !ev.done });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "操作失败");
+    }
+  }
+
+  const openItems = openDay ? (byDay.get(dateKey(openDay)) ?? []) : [];
+  const weekNo = useMemo(() => {
+    const mon = mondayOf(anchor);
+    const jan1 = new Date(mon.getFullYear(), 0, 1);
+    const offset = (jan1.getDay() + 6) % 7;
+    return Math.ceil((Math.floor((mon.getTime() - jan1.getTime()) / 86400000) + offset + 1) / 7);
+  }, [anchor]);
   const title =
     mode === "month"
       ? `${anchor.getFullYear()} 年 ${anchor.getMonth() + 1} 月`
-      : `${fmtRange(epoch(cells[0]))} – ${fmtRange(epoch(cells[cells.length - 1]))}`;
-
-  const draftDate = draft ? new Date(`${draft.date}T00:00:00`) : null;
+      : `${anchor.getFullYear()} 年 · 第 ${weekNo} 周`;
 
   return (
-    <div className="calendar-wrap">
-      <div className="cal-toolbar">
-        <div className="cal-title">{title}</div>
-        <div className="cal-nav">
-          <button className="btn btn-ghost btn-sm" onClick={() => nav(-1)} aria-label="上一页">
-            ‹
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setAnchor(startOfDay(new Date()))}
-          >
-            今天
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => nav(1)} aria-label="下一页">
-            ›
-          </button>
-        </div>
-        <div className="cal-modes" role="group" aria-label="视图切换">
-          <button
-            className={`cal-mode${mode === "month" ? " active" : ""}`}
-            onClick={() => setMode("month")}
-          >
-            月
-          </button>
-          <button
-            className={`cal-mode${mode === "week" ? " active" : ""}`}
-            onClick={() => setMode("week")}
-          >
-            周
-          </button>
-        </div>
-        <button className="btn btn-primary btn-sm" onClick={() => openCreate(new Date())}>
-          ＋ 新建
-        </button>
-      </div>
-
-      {error && (
-        <div className="error-banner" role="alert">
-          {error}
-        </div>
-      )}
-      {loading && <div className="hint">加载中…</div>}
-
-      <div className={`cal-grid cal-${mode}`}>
-        <div className="cal-weekhead">
-          <span className="week-label">周</span>
-          {cells.slice(0, 7).map((d, i) => (
-            <button
-              key={i}
-              className={`week-head${dateKey(d) === todayKey ? " today" : ""}`}
-              onClick={() => openCreate(d)}
-              title="点击添加当天事项"
-            >
-              <span className="wn">{WEEK_LABELS[i]}</span>
-              <span className="wd">{d.getDate()}</span>
+    <div className={`calendar-wrap${openDay ? " with-drawer" : ""}`}>
+      <div className="cal-layout">
+        <div className="cal-main">
+          <div className="cal-toolbar">
+            <div className="cal-title">{title}</div>
+            <div className="cal-nav">
+              <button className="btn btn-ghost btn-sm" onClick={() => nav(-1)} aria-label="上一页">‹</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAnchor(startOfDay(new Date()))}>今天</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => nav(1)} aria-label="下一页">›</button>
+            </div>
+            <div className="cal-modes" role="group" aria-label="视图切换">
+              <button className={`cal-mode${mode === "month" ? " active" : ""}`} onClick={() => setMode("month")}>月</button>
+              <button className={`cal-mode${mode === "week" ? " active" : ""}`} onClick={() => setMode("week")}>周</button>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={() => resetFormFor(new Date())}>
+              ＋ 新建
             </button>
-          ))}
-        </div>
+          </div>
 
-        {mode === "month"
-          ? Array.from({ length: 6 }, (_, w) => (
-              <div className="cal-row" key={w}>
-                {cells.slice(w * 7, w * 7 + 7).map((d, i) => {
-                  const key = dateKey(d);
-                  const items = byDay.get(key) ?? [];
-                  const inMonth = d.getMonth() === anchor.getMonth();
-                  return (
-                    <div
-                      key={i}
-                      className={`cal-cell${inMonth ? "" : " muted"}${key === todayKey ? " today" : ""}`}
-                      onClick={() => openCreate(d)}
-                    >
-                      <span className="cell-date">{d.getDate()}</span>
-                      <div className="cell-items">
-                        {items.slice(0, 3).map((ev) => (
+          {error && <div className="error-banner" role="alert">{error}</div>}
+          {loading && <div className="hint">加载中…</div>}
+
+          {mode === "month" ? (
+            <div className="cal-month">
+              <div className="cal-weekhead">
+                {WEEK_LABELS.map((w) => <span className="week-head-cell" key={w}>周{w}</span>)}
+              </div>
+              {Array.from({ length: 6 }, (_, w) => (
+                <div className="cal-row" key={w}>
+                  {cells.slice(w * 7, w * 7 + 7).map((d, i) => {
+                    const key = dateKey(d);
+                    const items = byDay.get(key) ?? [];
+                    const inMonth = d.getMonth() === anchor.getMonth();
+                    const isToday = key === dateKey(new Date());
+                    return (
+                      <div
+                        key={i}
+                        className={`cal-cell${inMonth ? "" : " muted"}${isToday ? " today" : ""}`}
+                        onClick={() => resetFormFor(d)}
+                      >
+                        <span className="cell-date">{d.getDate()}</span>
+                        <div className="cell-items">
+                          {items.slice(0, 3).map((ev) => (
+                            <button
+                              key={ev.id}
+                              className={`cell-item ev-${ev.color}${ev.done ? " done" : ""}`}
+                              title={ev.title}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDayDrawer(d, ev);
+                              }}
+                            >
+                              {ev.title}
+                            </button>
+                          ))}
+                          {items.length > 3 && <span className="cell-more">+{items.length - 3}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="cal-week">
+              <div className="week-axis">
+                {Array.from({ length: 25 }, (_, h) => h % 3 === 0 ? <span key={h} style={{ top: h * PX_PER_HOUR - 7 }}>{pad(h)}:00</span> : null)}
+              </div>
+              {cells.map((d, i) => {
+                const key = dateKey(d);
+                const items = byDay.get(key) ?? [];
+                const timed = items.filter((ev) => ev.kind === "schedule" && !ev.all_day);
+                const others = items.filter((ev) => !(ev.kind === "schedule" && !ev.all_day));
+                return (
+                  <div
+                    key={i}
+                    className={`week-col${key === dateKey(new Date()) ? " today" : ""}`}
+                    onClick={() => resetFormFor(d)}
+                  >
+                    <div className="week-col-head"><span>{WEEK_LABELS[i]}</span></div>
+                    <div className="week-gridlines">
+                      {Array.from({ length: 25 }, (_, h) => (h % 3 === 0 ? <i key={h} style={{ top: h * PX_PER_HOUR }} /> : null))}
+                      {others.map((ev) => (
+                        <button
+                          key={ev.id}
+                          className={`ev-pinned ev-${ev.color}${ev.done ? " done" : ""}`}
+                          onClick={(e) => { e.stopPropagation(); openDayDrawer(d, ev); }}
+                        >
+                          {ev.title}
+                        </button>
+                      ))}
+                      {timed.map((ev) => {
+                        const t = tsToDate(ev.start_ts);
+                        const mins = t.getHours() * 60 + t.getMinutes();
+                        const top = (mins / 60) * PX_PER_HOUR + 10; // +头部空间
+                        const endMins = ev.end_ts ? (() => {
+                          const e = tsToDate(ev.end_ts);
+                          return e.getHours() * 60 + e.getMinutes();
+                        })() : mins + 60;
+                        const height = Math.max(44, ((endMins - mins) / 60) * PX_PER_HOUR);
+                        return (
                           <button
                             key={ev.id}
-                            className={`cell-item ${ev.kind}${ev.done ? " done" : ""}`}
-                            title={ev.title}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEdit(ev);
-                            }}
+                            className={`ev-block ev-${ev.color}${ev.done ? " done" : ""}`}
+                            style={{ top, height }}
+                            onClick={(e) => { e.stopPropagation(); openDayDrawer(d, ev); }}
                           >
+                            <span className="ev-time">{timeOf(t)}</span>
                             {ev.title}
                           </button>
-                        ))}
-                        {items.length > 3 && <span className="cell-more">+{items.length - 3} 项</span>}
-                      </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            ))
-          : cells.map((d, i) => {
-              const key = dateKey(d);
-              const items = byDay.get(key) ?? [];
-              return (
-                <div
-                  key={i}
-                  className={`cal-week-col${key === todayKey ? " today" : ""}`}
-                  onClick={() => openCreate(d)}
-                >
-                  <div className="week-col-head">
-                    <span className="wn">{WEEK_LABELS[i]}</span>
-                    <span className="wd">{d.getDate()}</span>
                   </div>
-                  <div className="week-col-items">
-                    {items.map((ev) => (
-                      <button
-                        key={ev.id}
-                        className={`cell-item ${ev.kind}${ev.done ? " done" : ""}`}
-                        title={ev.title}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(ev);
-                        }}
-                      >
-                        {ev.kind === "schedule" && !ev.all_day && (
-                          <span className="ev-time">{timeOf(tsToDate(ev.start_ts))}</span>
-                        )}
-                        {ev.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-      </div>
-
-      {draft && (
-        <div className="modal-backdrop" onMouseDown={() => setDraft(null)}>
-          <div className="modal card" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <span className="lbl">{editingId !== null ? "编辑事项" : "新建事项"}</span>
-              <button className="modal-close" aria-label="关闭" onClick={() => setDraft(null)}>
-                ×
-              </button>
+                );
+              })}
             </div>
-            <div className="modal-body">
+          )}
+        </div>
+
+        {openDay && (
+          <aside className="cal-drawer">
+            <div className="drawer-head">
+              <div className="drawer-title">{fmtDayTitle(openDay)}</div>
+              <button className="drawer-close" aria-label="关闭面板" onClick={() => setOpenDay(null)}>×</button>
+            </div>
+
+            {error && <div className="error-banner" role="alert">{error}</div>}
+
+            <div className="drawer-list">
+              {openItems.length === 0 && <div className="empty small">当天还没有事项</div>}
+              {openItems.map((ev) => (
+                <div className={`drawer-item ev-${ev.color}${ev.done ? " done" : ""}`} key={ev.id}>
+                  <input
+                    type="checkbox"
+                    checked={ev.done}
+                    aria-label={`完成${ev.title}`}
+                    onChange={() => toggleDone(ev)}
+                  />
+                  <div className="di-body" onClick={() => openDayDrawer(openDay, ev)}>
+                    <div className="di-title">{ev.title}</div>
+                    <div className="di-sub">
+                      {ev.kind === "schedule" ? "日程" : "待办"}
+                      {!ev.all_day && ev.kind === "schedule" && ` · ${timeOf(tsToDate(ev.start_ts))}`}
+                    </div>
+                  </div>
+                  <button className="di-del" aria-label={`删除${ev.title}`} onClick={() => removeEvent(ev.id)}>删除</button>
+                </div>
+              ))}
+            </div>
+
+            <div className="drawer-form">
+              <div className="drawer-form-title">{editingId !== null ? "编辑" : "＋ 新建便签"}</div>
               <div className="kind-tabs">
-                {(
-                  [
-                    ["schedule", "日程"],
-                    ["todo", "待办"],
-                  ] as const
-                ).map(([val, label]) => (
-                  <button
-                    key={val}
-                    className={`kind-tab${draft.kind === val ? " active" : ""}`}
-                    onClick={() => setDraft({ ...draft, kind: val, allDay: val === "todo" ? true : draft.allDay })}
-                  >
+                {([["schedule", "日程"], ["todo", "待办"]] as const).map(([val, label]) => (
+                  <button key={val} className={`kind-tab${form.kind === val ? " active" : ""}`}
+                    onClick={() => setForm({ ...form, kind: val, allDay: val === "todo" ? true : form.allDay })}>
                     {label}
                   </button>
                 ))}
               </div>
-
-              <label className="field-row">
-                <span>标题</span>
-                <input
-                  type="text"
-                  value={draft.title}
-                  placeholder="例如：与导师讨论方案"
-                  aria-label="标题"
-                  autoFocus
-                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                />
+              <label className="field-row"><span>标题</span>
+                <input type="text" value={form.title} placeholder="想记点什么…" aria-label="标题"
+                  onChange={(e) => setForm({ ...form, title: e.target.value })} />
               </label>
 
-              <label className="field-row">
-                <span>日期</span>
-                <input
-                  type="date"
-                  value={draft.date}
-                  aria-label="日期"
-                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-                />
-              </label>
+              <div className="field-row"><span>颜色</span>
+                <div className="swatches">
+                  {EVENT_COLORS.map((c) => (
+                    <button key={c.id} type="button" aria-label={`颜色${c.label}`} title={c.label}
+                      className={`swatch ev-${c.id}${form.color === c.id ? " active" : ""}`}
+                      onClick={() => setForm({ ...form, color: c.id })} />
+                  ))}
+                </div>
+              </div>
 
-              {draft.kind === "schedule" && (
+              {form.kind === "schedule" && (
+                <label className="field-row inline"><span>全天</span>
+                  <input type="checkbox" checked={form.allDay} onChange={(e) => setForm({ ...form, allDay: e.target.checked })} />
+                </label>
+              )}
+              {form.kind === "schedule" && !form.allDay && (
                 <>
-                  <label className="field-row inline">
-                    <span>全天</span>
-                    <input
-                      type="checkbox"
-                      checked={draft.allDay}
-                      onChange={(e) => setDraft({ ...draft, allDay: e.target.checked })}
-                    />
+                  <label className="field-row"><span>开始</span>
+                    <input type="time" value={form.startTime} aria-label="开始时间"
+                      onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
                   </label>
-                  {!draft.allDay && (
-                    <>
-                      <label className="field-row">
-                        <span>开始</span>
-                        <input
-                          type="time"
-                          value={draft.startTime}
-                          aria-label="开始时间"
-                          onChange={(e) => setDraft({ ...draft, startTime: e.target.value })}
-                        />
-                      </label>
-                      <label className="field-row">
-                        <span>结束</span>
-                        <input
-                          type="time"
-                          value={draft.endTime}
-                          aria-label="结束时间"
-                          onChange={(e) => setDraft({ ...draft, endTime: e.target.value })}
-                        />
-                      </label>
-                    </>
-                  )}
+                  <label className="field-row"><span>结束</span>
+                    <input type="time" value={form.endTime} aria-label="结束时间"
+                      onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
+                  </label>
                 </>
               )}
 
-              {draftDate && draft.kind === "todo" && (
-                <div className="date-hint">待办已设为：{draftDate.getMonth() + 1}月{draftDate.getDate()}日</div>
-              )}
-
               {editingId !== null && (
-                <label className="field-row inline">
-                  <span>完成</span>
-                  <input
-                    type="checkbox"
-                    checked={draft.done}
-                    onChange={(e) => setDraft({ ...draft, done: e.target.checked })}
-                  />
+                <label className="field-row inline"><span>完成</span>
+                  <input type="checkbox" checked={form.done} onChange={(e) => setForm({ ...form, done: e.target.checked })} />
                 </label>
               )}
-            </div>
-            <div className="modal-actions">
-              {editingId !== null && (
-                <button className="btn btn-ghost danger" onClick={() => removeEvent(editingId)}>
-                  删除
+
+              <div className="drawer-actions">
+                <button className="btn btn-primary" onClick={saveForm} disabled={saving}>
+                  {saving ? "保存中…" : editingId !== null ? "保存修改" : "添加到当日"}
                 </button>
-              )}
-              <span className="spacer" />
-              <button className="btn btn-ghost" onClick={() => setDraft(null)}>
-                取消
-              </button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>
-                {saving ? "保存中…" : "保存"}
-              </button>
+                {editingId !== null && (
+                  <button className="btn btn-ghost danger" onClick={() => removeEvent(editingId)}>删除</button>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

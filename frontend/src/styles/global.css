@@ -1588,3 +1588,60 @@ a.btn { text-decoration: none; }
 .date-hint { font-size: 12px; color: var(--muted); }
 .modal-actions { display: flex; align-items: center; gap: 10px; padding: 0 18px 18px; }
 .modal-actions .spacer { flex: 1; }
+
+/* ---------- 日历 v2：右侧面板 + 颜色 + 周时间轴 ---------- */
+.cal-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.calendar-wrap.with-drawer .cal-layout { grid-template-columns: minmax(0, 1fr) 340px; }
+@media (max-width: 1000px) { .calendar-wrap.with-drawer .cal-layout { grid-template-columns: minmax(0, 1fr); } .cal-drawer { position: static; max-height: none; } }
+
+.cal-month { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+.cal-weekhead { display: grid; grid-template-columns: repeat(7, 1fr); background: #f1f4ee; border-bottom: 1px solid var(--line); }
+.week-head-cell { padding: 8px 0; text-align: center; font-size: 12px; color: var(--muted); }
+
+/* 事件颜色(浅色) */
+.ev-green { background: #e3efe7; color: #24543a; }
+.ev-blue { background: #e2ecfb; color: #274c80; }
+.ev-yellow { background: #fbf3d0; color: #7a6414; }
+.ev-pink { background: #fbe4ec; color: #8a3353; }
+.ev-purple { background: #ede6f7; color: #5b3d86; }
+
+.cell-item { font-size: 11.5px; padding: 2px 6px; border-radius: 5px; display: block; width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.35; }
+.cell-item.done, .ev-block.done, .ev-pinned.done, .drawer-item.done .di-title { text-decoration: line-through; opacity: 0.55; }
+.cell-item:hover { filter: brightness(0.95); }
+
+/* 周视图：时间轴 */
+.cal-week { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); gap: 0; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.week-axis { position: relative; height: 780px; border-right: 1px solid var(--line); background: #f7f7f1; }
+.week-axis span { position: absolute; right: 6px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.week-col { position: relative; min-width: 0; border-right: 1px solid var(--line); cursor: pointer; }
+.week-col:last-child { border-right: none; }
+.week-col-head { text-align: center; padding: 8px 0 4px; font-weight: 700; color: var(--ink); background: #fbfbf6; border-bottom: 1px solid var(--line); position: sticky; top: 0; }
+.week-col.today .week-col-head { color: var(--green); }
+.week-gridlines { position: relative; height: 780px; }
+.week-gridlines i { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(0,0,0,0.06); }
+.week-gridlines .ev-pinned { margin: 8px 4px 2px; width: calc(100% - 8px); font-size: 11.5px; padding: 2px 6px; border-radius: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-block { position: absolute; left: 4px; right: 4px; border-radius: 7px; padding: 3px 6px; font-size: 11.5px; overflow: hidden; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.ev-block .ev-time { display: block; font-family: var(--mono); font-size: 10px; opacity: 0.75; }
+.ev-block:hover { filter: brightness(0.96); }
+
+/* 右侧面板 */
+.cal-drawer { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 14px; position: sticky; top: 0; max-height: calc(100vh - 90px); overflow-y: auto; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.drawer-title { font-weight: 600; font-size: 14.5px; }
+.drawer-close { font-size: 20px; color: var(--muted); padding: 0 6px; border-radius: 6px; }
+.drawer-close:hover { color: var(--ink); }
+.drawer-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.drawer-item { display: flex; align-items: flex-start; gap: 8px; border-radius: 10px; padding: 8px 10px; }
+.drawer-item input[type="checkbox"] { margin-top: 2px; accent-color: var(--green); }
+.drawer-item .di-body { flex: 1; cursor: pointer; min-width: 0; }
+.drawer-item .di-title { font-size: 13.5px; font-weight: 600; word-break: break-word; }
+.drawer-item .di-sub { font-size: 11px; opacity: 0.75; margin-top: 1px; }
+.drawer-item .di-del { font-size: 11.5px; color: var(--muted); padding: 2px 6px; border-radius: 6px; flex: none; }
+.drawer-item .di-del:hover { color: #a33; }
+.empty.small { font-size: 12.5px; color: var(--muted); padding: 8px 0; }
+.drawer-form { border-top: 1px dashed var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.drawer-form-title { font-weight: 600; font-size: 13px; }
+.swatches { display: flex; gap: 6px; }
+.swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; }
+.swatch.active { border-color: var(--ink); }
+.drawer-actions { display: flex; gap: 8px; align-items: center; }
