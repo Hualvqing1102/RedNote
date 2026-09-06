@@ -10,6 +10,11 @@ node_modules/
 frontend/dist/
 frontend/node_modules/
 
+# 桌面打包产物
+build/
+dist/
+RedNote.spec
+
 # 系统
 .DS_Store
 Thumbs.db

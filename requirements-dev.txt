@@ -1,1 +1,7 @@
+# 开发/测试
 pytest
+
+# 桌面打包(M3)：pywebview 壳 + PyInstaller
+# 国内网络可加 -i https://mirrors.aliyun.com/pypi/simple/
+pywebview
+pyinstaller
