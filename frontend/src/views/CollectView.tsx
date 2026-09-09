@@ -43,6 +43,16 @@ export default function CollectView() {
   const [engineError, setEngineError] = useState(false);
   // 详细讲解模式：不保存原文，改成让 Agent 生成逐段详解
   const [explainMode, setExplainMode] = useState(false);
+  // 从 Agent 粘贴导入(写入桥)
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [aiTitle, setAiTitle] = useState("");
+  const [aiUrl, setAiUrl] = useState("");
+  const [aiName, setAiName] = useState("");
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiPoints, setAiPoints] = useState("");
+  const [aiContent, setAiContent] = useState("");
+  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 最近一次导入的本地文件信息(便于“打开本地文件/OCR 重试”)
@@ -98,6 +108,46 @@ export default function CollectView() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "处理失败，请重试");
       setPhase(0);
+    }
+  }
+
+  async function importFromAgent() {
+    const content = aiContent.trim();
+    if (!content) {
+      setError("请填写讲解/总结正文");
+      return;
+    }
+    setAiBusy(true);
+    setError("");
+    try {
+      const note = await api.importAgent({
+        title: aiTitle.trim(),
+        summary: aiSummary.trim(),
+        points: aiPoints.split(/\n+/).map((s) => s.trim()).filter(Boolean),
+        content,
+        source_url: aiUrl.trim(),
+        source_name: aiName.trim(),
+      });
+      if (aiFile) {
+        try {
+          await api.uploadAttachment(note.id, aiFile);
+        } catch {
+          // 附件失败不阻断主流程
+        }
+      }
+      setAgentOpen(false);
+      setAiTitle("");
+      setAiUrl("");
+      setAiName("");
+      setAiSummary("");
+      setAiPoints("");
+      setAiContent("");
+      setAiFile(null);
+      setView("library");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "导入失败");
+    } finally {
+      setAiBusy(false);
     }
   }
 
@@ -329,6 +379,103 @@ export default function CollectView() {
         <span className="t">详细讲解模式</span>
         <span className="d">不保存原文，改为让 AI 逐段详解</span>
       </label>
+
+      <div className="agent-import">
+        <button
+          type="button"
+          className="agent-toggle"
+          aria-expanded={agentOpen}
+          onClick={() => setAgentOpen((o) => !o)}
+        >
+          {agentOpen ? "收起 Agent 导入" : "从 Agent 导入讲解 / 总结"}
+        </button>
+        {agentOpen && (
+          <div className="agent-form">
+            <p className="hint">
+              把外部 Agent（如 DSH）的讲解/总结结果粘贴到下面，RedNote 会直接归档为笔记；
+              来源网页链接或原论文文件会一并保留。
+            </p>
+            <div className="ai-grid">
+              <label className="edit-field">
+                <span>标题</span>
+                <input
+                  type="text"
+                  value={aiTitle}
+                  onChange={(e) => setAiTitle(e.target.value)}
+                  placeholder="留空用「无标题」"
+                  aria-label="导入标题"
+                />
+              </label>
+              <label className="edit-field">
+                <span>来源网址</span>
+                <input
+                  type="text"
+                  value={aiUrl}
+                  onChange={(e) => setAiUrl(e.target.value)}
+                  placeholder="https://…(讲解的文章/视频链接)"
+                  aria-label="导入来源网址"
+                />
+              </label>
+              <label className="edit-field">
+                <span>来源名称</span>
+                <input
+                  type="text"
+                  value={aiName}
+                  onChange={(e) => setAiName(e.target.value)}
+                  placeholder="如：Anthropic 官方文章 / paper.pdf"
+                  aria-label="导入来源名称"
+                />
+              </label>
+              <label className="edit-field">
+                <span>摘要</span>
+                <textarea
+                  value={aiSummary}
+                  onChange={(e) => setAiSummary(e.target.value)}
+                  placeholder="一句话概括(可留空)"
+                  aria-label="导入摘要"
+                />
+              </label>
+              <label className="edit-field">
+                <span>要点（每行一条）</span>
+                <textarea
+                  value={aiPoints}
+                  onChange={(e) => setAiPoints(e.target.value)}
+                  placeholder={"要点一\n要点二…"}
+                  aria-label="导入要点"
+                />
+              </label>
+              <label className="edit-field ai-content">
+                <span>讲解 / 总结正文（必填）</span>
+                <textarea
+                  value={aiContent}
+                  onChange={(e) => setAiContent(e.target.value)}
+                  placeholder="把 DSH 的讲解/总结贴到这里…"
+                  aria-label="导入正文"
+                />
+              </label>
+              <label className="edit-field">
+                <span>原文件（可选，论文/PDF 将作为附件归档）</span>
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md,.epub,.csv,.xlsx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
+                  aria-label="导入原文件"
+                  onChange={(e) => setAiFile(e.target.files?.[0] ?? null)}
+                />
+                {aiFile && <span className="hint">已选：{aiFile.name}</span>}
+              </label>
+            </div>
+            <div className="ai-actions">
+              <button
+                className="btn btn-primary"
+                onClick={importFromAgent}
+                disabled={aiBusy}
+              >
+                {aiBusy ? "保存中…" : "保存到笔记"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {error && (
         <div className="error-banner" role="alert">

@@ -1307,6 +1307,23 @@ a.btn { text-decoration: none; }
   padding: 7px 9px; font-size: 13px;
 }
 
+/* ---------- 从 Agent 导入 ---------- */
+.agent-import { margin-top: 16px; }
+.agent-toggle {
+  width: 100%; padding: 10px 14px; font-size: 14px; font-weight: 600;
+  background: var(--surface); border: 1px dashed var(--line); border-radius: 10px;
+  color: var(--green-deep); cursor: pointer;
+}
+.agent-toggle:hover { border-color: var(--green); background: rgba(46,107,76,0.05); }
+.agent-form {
+  margin-top: 10px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px; box-shadow: var(--shadow);
+}
+.ai-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.ai-grid .ai-content { grid-column: 1 / -1; }
+.ai-content textarea { min-height: 220px; font-family: var(--mono); line-height: 1.7; }
+.ai-actions { margin-top: 12px; }
+
 /* ---------- 注释编辑底部操作(右下角“确认”) ---------- */
 .cc-card-actions {
   display: flex; align-items: center; justify-content: space-between;

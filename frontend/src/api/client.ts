@@ -101,6 +101,17 @@ export const api = {
   createNote: (input: NoteInput): Promise<Note> =>
     request("/api/notes", { method: "POST", body: JSON.stringify(input) }),
 
+  /** Agent 写入桥：把讲解/总结结果直接归档为笔记 */
+  importAgent: (input: {
+    title: string;
+    summary?: string;
+    points?: string[];
+    content: string;
+    source_url?: string;
+    source_name?: string;
+  }): Promise<Note> =>
+    request("/api/import/agent", { method: "POST", body: JSON.stringify(input) }),
+
   updateNote: (id: number, patch: NotePatch): Promise<Note> =>
     request(`/api/notes/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
 
