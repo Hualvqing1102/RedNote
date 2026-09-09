@@ -2,17 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { api } from "../api/client";
 import ConfirmButton from "../components/ConfirmButton";
-import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
 import { normalizedSelection, rowIndexOf } from "../lib/selection";
 import { relocateComment, rowsFor } from "../lib/annotations";
 import { useAppStore } from "../store/useAppStore";
-import type { CommentCard, Folder, Note, SettingsResponse } from "../types";
-
-interface Msg {
-  role: "user" | "ai";
-  text: string;
-}
+import type { CommentCard, Folder, Note } from "../types";
 
 interface CtxMenu {
   x: number;
@@ -101,12 +95,7 @@ export default function NoteView() {
   const [refsDraft, setRefsDraft] = useState<RefEntry[]>([]);
   const [refOptions, setRefOptions] = useState<Note[]>([]);
   const [saving, setSaving] = useState(false);
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const [question, setQuestion] = useState("");
-  const [typing, setTyping] = useState(false);
   const [error, setError] = useState("");
-  const [engine, setEngine] = useState<SettingsResponse | null>(null);
-  const [engineError, setEngineError] = useState(false);
   const [foldersState, setFoldersState] = useState<Folder[]>([]);
 
   // 注释：内联锚定在正文段落之后
@@ -139,7 +128,6 @@ export default function NoteView() {
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
-  const threadRef = useRef<HTMLDivElement>(null);
   const commentsRef = useRef(comments);
   commentsRef.current = comments;
   const blocksRef = useRef(0);
@@ -161,27 +149,10 @@ export default function NoteView() {
         setComments(n.comments || []);
         setCommentsDirty(false);
         setSaveState("idle");
-        setMessages([
-          {
-            role: "ai",
-            text: "我可以基于这篇笔记回答你的问题。试试问「这篇的核心结论是什么？」",
-          },
-        ]);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
-    api
-      .getSettings()
-      .then(setEngine)
-      .catch(() => setEngineError(true));
     api.listFolders().then(setFoldersState).catch(() => {});
   }, [noteId]);
-
-  useEffect(() => {
-    const el = threadRef.current;
-    if (el && typeof el.scrollTo === "function") {
-      el.scrollTo({ top: el.scrollHeight });
-    }
-  }, [messages, typing]);
 
   // 阅读偏好持久化
   useEffect(() => {
@@ -430,22 +401,6 @@ export default function NoteView() {
     }
   }
 
-  async function ask() {
-    const q = question.trim();
-    if (!q || !note || typing) return;
-    setMessages((m) => [...m, { role: "user", text: q }]);
-    setQuestion("");
-    setTyping(true);
-    try {
-      const res = await api.ask(note.id, q);
-      setMessages((m) => [...m, { role: "ai", text: res.answer }]);
-    } catch (e) {
-      setMessages((m) => [...m, { role: "ai", text: e instanceof Error ? e.message : "请求失败" }]);
-    } finally {
-      setTyping(false);
-    }
-  }
-
   // ------------------------------------------------ 注释编辑
 
   function touchComments(next: CommentCard[]) {
@@ -634,14 +589,6 @@ export default function NoteView() {
   if (!note) {
     return <div className="hint">加载中…</div>;
   }
-
-  const engineCloud = engine !== null && sendsToCloud(engine);
-  const engineText = engineError
-    ? "引擎状态未知（默认本地规则）"
-    : engine
-      ? describeEngine(engine)
-      : "";
-  const showEngine = Boolean(engine || engineError);
 
   const blocks = splitBlocks(note.content);
   blocksRef.current = blocks.length;
@@ -1248,50 +1195,6 @@ export default function NoteView() {
           </ConfirmButton>
         </div>
       </div>
-
-      <aside className="ask-panel">
-        <div className="head">
-          <span className="lbl">就这篇笔记追问</span>
-        </div>
-        {showEngine && (
-          <div className={`engine-note${engineCloud ? " warn" : ""}`}>
-            <span className="dot" />
-            {engineText}
-          </div>
-        )}
-        <div className="thread" ref={threadRef}>
-          {messages.map((m, i) => (
-            <div className={`msg ${m.role}`} key={i}>
-              {m.text}
-            </div>
-          ))}
-          {typing && (
-            <div className="msg ai">
-              <span className="typing">
-                <span />
-                <span />
-                <span />
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="ask-input">
-          <input
-            type="text"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && ask()}
-            placeholder="例如：这篇的核心结论是什么？"
-            aria-label="输入问题"
-          />
-          <button className="send" onClick={ask} aria-label="发送" disabled={typing}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m22 2-7 20-4-9-9-4Z" />
-              <path d="M22 2 11 13" />
-            </svg>
-          </button>
-        </div>
-      </aside>
     </div>
   );
 }

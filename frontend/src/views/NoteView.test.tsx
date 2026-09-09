@@ -86,18 +86,4 @@ describe("NoteView", () => {
     );
     expect(await screen.findByText("新写的正文")).toBeInTheDocument();
   });
-
-  it("对笔记追问并展示回答", async () => {
-    vi.mocked(api.ask).mockResolvedValue({ answer: "这是针对问题的回答" });
-    render(<NoteView />);
-    await screen.findByText("Transformer 笔记");
-
-    fireEvent.change(screen.getByLabelText("输入问题"), {
-      target: { value: "核心结论是什么？" },
-    });
-    fireEvent.click(screen.getByLabelText("发送"));
-
-    await waitFor(() => expect(api.ask).toHaveBeenCalledWith(1, "核心结论是什么？"));
-    expect(await screen.findByText("这是针对问题的回答")).toBeInTheDocument();
-  });
 });
