@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 data/
+Notedata/
 
 # Node / 前端
 node_modules/
