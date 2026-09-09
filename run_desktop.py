@@ -103,6 +103,19 @@ class DesktopApi:
         path = picked[0] if isinstance(picked, (list, tuple)) else picked
         return {"ok": True, "path": str(path), "name": os.path.basename(str(path))}
 
+    def choose_folder(self) -> dict:
+        """选择文件夹(设置页「数据存储位置」用)。"""
+        import webview
+
+        try:
+            picked = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+        if not picked:
+            return {"ok": False, "cancelled": True}
+        path = picked[0] if isinstance(picked, (list, tuple)) else picked
+        return {"ok": True, "path": str(path)}
+
     def open_path(self, path: str) -> dict:
         try:
             os.startfile(path)
@@ -115,10 +128,19 @@ def main() -> int:
     # 桌面运行标记：开放“读取本机文件路径”这类仅桌面可用的接口
     os.environ["REDNOTE_DESKTOP"] = "1"
     if getattr(sys, "frozen", False):
-        # exe 运行时默认把数据放在用户目录，避免写在安装位置不可写
+        # exe 运行时数据放用户目录；若设置了“自选存储位置”(锚点文件)则优先使用
         if not os.getenv("REDNOTE_DATA_DIR"):
             base = os.environ.get("APPDATA") or str(Path.home())
-            os.environ["REDNOTE_DATA_DIR"] = str(Path(base) / "RedNote")
+            anchor = Path(base) / "RedNote"
+            chosen = ""
+            try:
+                chosen = (anchor / "data_location.txt").read_text(encoding="utf-8").strip()
+            except OSError:
+                pass
+            if chosen and Path(chosen).is_absolute():
+                os.environ["REDNOTE_DATA_DIR"] = chosen
+            else:
+                os.environ["REDNOTE_DATA_DIR"] = str(anchor)
 
     _setup_logging()
 

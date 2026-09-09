@@ -147,6 +147,11 @@ class SettingsTestIn(BaseModel):
     api_key: str | None = None
 
 
+class StoragePathIn(BaseModel):
+    """数据存储位置：用户自选笔记目录。"""
+    path: str
+
+
 def create_app(db_path: str | None = None, settings_path: str | None = None) -> FastAPI:
     db_path = db_path or str(config.db_path())
     settings_path = settings_path or str(settings_store.settings_path())
@@ -219,6 +224,36 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
         except Exception as exc:  # noqa: BLE001 - 兜底，保证有可展示的失败原因
             raise HTTPException(status_code=400, detail=f"测试失败：{exc}") from exc
         return {"ok": True, "reply": reply[:80]}
+
+    @app.get("/api/settings/storage")
+    def get_storage() -> dict[str, str]:
+        from app.services import storage as storage_service
+
+        return {
+            "dir": str(storage_service.current_dir()),
+            "anchor": str(storage_service.anchor_dir()),
+        }
+
+    @app.put("/api/settings/storage")
+    def put_storage(payload: StoragePathIn) -> dict[str, Any]:
+        """迁移数据到新目录并写位置锚点(重启后生效)。"""
+        from app.services import storage as storage_service
+
+        target = (payload.path or "").strip()
+        try:
+            result = storage_service.migrate_to(target)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        storage_service.write_location(Path(target).resolve())
+        return {**result, "restart": True}
+
+    @app.delete("/api/settings/storage")
+    def reset_storage() -> dict[str, Any]:
+        """恢复默认数据位置(移除锚点，重启后回到 %APPDATA%\\RedNote)。"""
+        from app.services import storage as storage_service
+
+        storage_service.clear_location()
+        return {"restart": True, "dir": str(storage_service.anchor_dir())}
 
     # ------------------------------------------------ 采集
 
