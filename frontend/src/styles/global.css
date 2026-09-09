@@ -705,7 +705,7 @@ textarea {
   max-width: 1040px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -1574,9 +1574,11 @@ a.btn { text-decoration: none; }
 /* ---------- 阅读布局：目录独立左栏 + 主内容 + 追问栏 ---------- */
 .annotated-article { display: block; }
 .note-layout.has-outline {
-  max-width: none;
-  margin: 0 0 0 -28px; /* 让目录栏贴住最左侧功能栏(抵消 .content 左内边距) */
-  grid-template-columns: 200px minmax(0, 1fr) 320px;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 8px;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: 28px;
 }
 .note-layout .reader-rail {
   position: sticky; top: 0; align-self: start; margin: 0;
@@ -1606,7 +1608,7 @@ a.btn { text-decoration: none; }
 .note-layout .reader-rail button.lv6 { padding-left: 54px; }
 .reader-tools-count { font-size: 12px; color: var(--muted); }
 @media (max-width: 1180px) {
-  .note-layout.has-outline { grid-template-columns: minmax(0, 1fr) 320px; }
+  .note-layout.has-outline { grid-template-columns: minmax(0, 1fr); }
   .note-layout.has-outline .reader-rail { display: none; }
 }
 @media (max-width: 900px) {
