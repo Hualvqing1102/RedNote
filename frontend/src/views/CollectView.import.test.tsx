@@ -88,4 +88,30 @@ describe("CollectView 从 Agent 导入", () => {
     expect(await screen.findByText("请填写讲解/总结正文")).toBeInTheDocument();
     expect(api.importAgent).not.toHaveBeenCalled();
   });
+
+  it("拖入/选择 Agent 的 Markdown 文件：按首个标题命名并原样保存(含表格)", async () => {
+    render(<CollectView />);
+    const input = screen.getByLabelText("选择 Agent 的 Markdown 文件") as HTMLInputElement;
+    const md = "# 上下文工程讲解\n\n正文一段。\n\n| 列1 | 列2 |\n|---|---|\n| a | b |\n";
+    const file = new File([md], "agent.md", { type: "text/markdown" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(api.importAgent).toHaveBeenCalledWith({
+        title: "上下文工程讲解",
+        content: md.trim(),
+        source_name: "agent.md",
+      });
+      expect(useAppStore.getState().view).toBe("library");
+    });
+  });
+
+  it("非 Markdown 文件提示", async () => {
+    render(<CollectView />);
+    const input = screen.getByLabelText("选择 Agent 的 Markdown 文件") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "paper.pdf")] } });
+    expect(await screen.findByText(/请选择 Agent 输出的 Markdown 文件/)).toBeInTheDocument();
+    expect(api.importAgent).not.toHaveBeenCalled();
+  });
 });

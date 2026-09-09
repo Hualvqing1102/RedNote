@@ -1309,6 +1309,8 @@ a.btn { text-decoration: none; }
 
 /* ---------- 从 Agent 导入 ---------- */
 .agent-import { margin-top: 16px; }
+.agent-drop { margin-bottom: 0; padding: 18px; }
+.agent-import .agent-toggle { margin-top: 10px; }
 .agent-toggle {
   width: 100%; padding: 10px 14px; font-size: 14px; font-weight: 600;
   background: var(--surface); border: 1px dashed var(--line); border-radius: 10px;

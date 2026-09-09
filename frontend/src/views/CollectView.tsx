@@ -53,6 +53,7 @@ export default function CollectView() {
   const [aiContent, setAiContent] = useState("");
   const [aiFile, setAiFile] = useState<File | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const agentMdInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 最近一次导入的本地文件信息(便于“打开本地文件/OCR 重试”)
@@ -143,6 +144,51 @@ export default function CollectView() {
       setAiPoints("");
       setAiContent("");
       setAiFile(null);
+      setView("library");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "导入失败");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  /** 直接拖入/选择 Agent 生成的 Markdown，原样(含表格/格式)存为笔记 */
+  function readFileText(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("读取文件失败"));
+      reader.readAsText(file);
+    });
+  }
+
+  function titleFromMarkdown(content: string, name: string): string {
+    const m = /^#\s+(.+)$/m.exec(content);
+    if (m && m[1].trim()) return m[1].trim();
+    const stem = name.replace(/\.(md|markdown|txt)$/i, "").trim();
+    return stem || "无标题";
+  }
+
+  async function importAgentFile(file: File | null) {
+    if (!file) return;
+    if (!/\.(md|markdown|txt)$/i.test(file.name)) {
+      setError("请选择 Agent 输出的 Markdown 文件（.md / .markdown / .txt）");
+      return;
+    }
+    setAiBusy(true);
+    setError("");
+    try {
+      const content = (await readFileText(file)).trim();
+      if (!content) {
+        setError("文件内容为空");
+        return;
+      }
+      await api.importAgent({
+        title: titleFromMarkdown(content, file.name),
+        content,
+        source_name: file.name,
+      });
+      setAgentOpen(false);
       setView("library");
     } catch (e) {
       setError(e instanceof Error ? e.message : "导入失败");
@@ -381,6 +427,42 @@ export default function CollectView() {
       </label>
 
       <div className="agent-import">
+        <div
+          className="dropzone agent-drop"
+          role="button"
+          tabIndex={0}
+          aria-label="拖入 Agent 的 Markdown 文件"
+          onClick={() => agentMdInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              agentMdInputRef.current?.click();
+            }
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            importAgentFile(e.dataTransfer.files?.[0] ?? null);
+          }}
+        >
+          <div className="dz-icon" aria-hidden>📄</div>
+          <div className="t">把 Agent 生成的 Markdown 拖到这里（保留格式和表格）</div>
+          <div className="d">或点击选择 .md 文件 · 作为笔记原样存档</div>
+        </div>
+        <input
+          ref={agentMdInputRef}
+          type="file"
+          accept=".md,.markdown,.txt"
+          style={{ display: "none" }}
+          aria-label="选择 Agent 的 Markdown 文件"
+          onChange={async (e) => {
+            await importAgentFile(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
         <button
           type="button"
           className="agent-toggle"
