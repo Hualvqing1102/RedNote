@@ -76,7 +76,12 @@ describe("NoteView", () => {
     fireEvent.change(editor, { target: { value: "新写的正文" } });
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
-    await waitFor(() => expect(api.updateNote).toHaveBeenCalledWith(1, { content: "新写的正文" }));
+    await waitFor(() =>
+      expect(api.updateNote).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ content: "新写的正文", title: "Transformer 笔记" })
+      )
+    );
     expect(await screen.findByText("新写的正文")).toBeInTheDocument();
   });
 

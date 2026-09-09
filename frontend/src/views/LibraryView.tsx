@@ -12,6 +12,7 @@ function formatDate(epoch: number): string {
 export default function LibraryView() {
   const openNote = useAppStore((s) => s.openNote);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [trashNotes, setTrashNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [q, setQ] = useState("");
   const [folderId, setFolderId] = useState<number | null>(null); // null = 全部
@@ -20,6 +21,7 @@ export default function LibraryView() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [managing, setManaging] = useState(false);
+  const [inTrash, setInTrash] = useState(false);
 
   function refreshFolders() {
     api
@@ -33,6 +35,13 @@ export default function LibraryView() {
   }, []);
 
   useEffect(() => {
+    if (inTrash) {
+      api
+        .listNotes({ deleted: true })
+        .then(setTrashNotes)
+        .catch(() => setError("回收站加载失败"));
+      return;
+    }
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
@@ -49,15 +58,61 @@ export default function LibraryView() {
       }
     }, q ? 200 : 0);
     return () => clearTimeout(timer);
-  }, [q, folderId]);
+  }, [q, folderId, inTrash]);
 
   async function removeNote(id: number) {
-    if (!window.confirm("确定删除这篇笔记吗？此操作不可恢复。")) return;
+    if (!window.confirm("把这篇笔记移入回收站？可随时恢复。")) return;
     try {
       await api.deleteNote(id);
       setNotes((list) => list.filter((n) => n.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
+  async function restoreFromTrash(id: number) {
+    try {
+      await api.restoreNote(id);
+      setTrashNotes((list) => list.filter((n) => n.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "恢复失败");
+    }
+  }
+
+  async function purgeNote(id: number) {
+    if (!window.confirm("彻底删除这篇笔记？不可恢复。")) return;
+    try {
+      await api.purgeNote(id);
+      setTrashNotes((list) => list.filter((n) => n.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
+  async function emptyTrash() {
+    if (!window.confirm("清空回收站？其中笔记将彻底删除，不可恢复。")) return;
+    try {
+      await api.emptyTrash();
+      setTrashNotes([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "清空失败");
+    }
+  }
+
+  async function createBlankNote() {
+    setError("");
+    try {
+      const note = await api.createNote({
+        title: "无标题",
+        summary: "",
+        content: "",
+        points: [],
+        source_url: "",
+        source_snapshot: "",
+      });
+      openNote(note.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "新建失败");
     }
   }
 
@@ -136,8 +191,68 @@ export default function LibraryView() {
         >
           导出全部 Markdown
         </a>
+        <button className="btn btn-primary btn-sm" onClick={createBlankNote}>
+          ＋ 新建笔记
+        </button>
+        <button
+          className={`btn btn-ghost btn-sm${inTrash ? " toggle-on" : ""}`}
+          aria-pressed={inTrash}
+          onClick={() => {
+            setInTrash((v) => !v);
+            setManaging(false);
+          }}
+        >
+          {inTrash ? "← 返回笔记" : "回收站"}
+        </button>
       </div>
 
+      {inTrash ? (
+        <>
+          <div className="filters">
+            <span className="hint">回收站：已删除的笔记可恢复，或彻底删除</span>
+            <span className="spacer" />
+            {trashNotes.length > 0 && (
+              <button className="btn btn-ghost btn-sm" onClick={emptyTrash}>
+                清空回收站
+              </button>
+            )}
+          </div>
+          {error && (
+            <div className="error-banner" role="alert">
+              {error}
+            </div>
+          )}
+          {trashNotes.length === 0 ? (
+            <div className="empty">
+              <div className="big">回收站是空的</div>
+              <p>删除的笔记会先到这里，可随时恢复。</p>
+            </div>
+          ) : (
+            <div className="cards">
+              {trashNotes.map((note) => (
+                <article className="note-card trashed" key={note.id}>
+                  <div className="tab" />
+                  <div className="kind">回收站 · {formatDate(note.deleted_at ?? note.created_at)}</div>
+                  <h3>{note.title}</h3>
+                  <div className="snippet">{note.summary || note.content.slice(0, 120)}</div>
+                  <div className="trash-actions">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => restoreFromTrash(note.id)}
+                    >
+                      恢复
+                    </button>
+                    <button className="btn btn-ghost btn-sm danger" onClick={() => purgeNote(note.id)}>
+                      彻底删除
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
       <div className="filters" aria-label="收藏夹筛选">
         <button
           className={`fchip${folderId === null ? " active" : ""}`}
@@ -257,7 +372,7 @@ export default function LibraryView() {
               </div>
               <button
                 className="card-delete"
-                title="删除笔记"
+                title="移入回收站"
                 onClick={(e) => {
                   e.stopPropagation();
                   removeNote(note.id);
@@ -268,6 +383,8 @@ export default function LibraryView() {
             </article>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );

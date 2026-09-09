@@ -112,6 +112,12 @@ describe("renderBlocks", () => {
     expect(dom.querySelector("img")).toBeNull();
     expect(dom.textContent).toContain("坏图");
   });
+
+  it("笔记互链 rednote:// 渲染为可点击链接", () => {
+    const dom = renderBlocksToDom("[看这篇](rednote://note/3)");
+    const link = dom.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("rednote://note/3");
+  });
 });
 
 describe("renderParagraphs", () => {

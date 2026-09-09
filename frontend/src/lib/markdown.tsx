@@ -20,11 +20,11 @@ type Inline =
 const INLINE_TOKEN_RE =
   /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|!\[[^\]]*\]\([^)\s]+\)|\[[^\]]+\]\([^)\s]+\))/g;
 
-/** 链接白名单：http(s)/mailto、站内相对路径、锚点；其余(如 javascript:、data:text/html)一律丢弃。 */
+/** 链接白名单：http(s)/mailto、笔记互链(rednote://note/id)、站内相对路径、锚点；其余(如 javascript:、data:text/html)一律丢弃。 */
 function safeHref(raw: string): string {
   const t = (raw || "").trim();
   if (!t) return "";
-  if (/^(https?:|mailto:)/i.test(t)) return t;
+  if (/^(https?:|mailto:|rednote:)/i.test(t)) return t;
   if (t.startsWith("/") || t.startsWith("#")) return t;
   return "";
 }

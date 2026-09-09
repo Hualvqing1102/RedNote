@@ -106,7 +106,7 @@ describe("LibraryView", () => {
     render(<LibraryView />);
     await screen.findByText("Transformer 笔记");
 
-    fireEvent.click(screen.getByTitle("删除笔记"));
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
     await waitFor(() => expect(api.deleteNote).toHaveBeenCalledWith(1));
     await waitFor(() =>
       expect(screen.queryByText("Transformer 笔记")).not.toBeInTheDocument()

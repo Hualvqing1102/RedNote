@@ -1250,6 +1250,39 @@ a.btn { text-decoration: none; }
 .seg-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .seg-saved { font-size: 12px; color: var(--green-deep); }
 
+/* ---------- 记事本体：手改标题/摘要/要点 编辑面板 ---------- */
+.note-edit-panel { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+.edit-field { display: flex; flex-direction: column; gap: 5px; }
+.edit-field > span { font-size: 12px; color: var(--muted); }
+.edit-field input[type="text"],
+.edit-field textarea {
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font-size: 14px; font-family: inherit; background: #fff;
+}
+.edit-field textarea.edit-content { min-height: 340px; line-height: 1.7; font-family: var(--mono); }
+.edit-points { display: flex; flex-direction: column; gap: 6px; }
+.edit-point { display: flex; gap: 6px; align-items: center; }
+.edit-point input { flex: 1; min-width: 0; }
+
+/* ---------- 附件归档 ---------- */
+.note-attachments { margin: 18px 0 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.att-head { display: flex; align-items: center; }
+.att-head .lbl { font-size: 13px; color: var(--muted); }
+.att-add input { display: none; }
+.att-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.att-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.att-list a { color: var(--green-deep); word-break: break-all; }
+.att-meta { color: var(--muted); font-size: 12px; }
+.att-list .chip-op { margin-left: auto; }
+
+/* ---------- 回收站 ---------- */
+.trash-actions { display: flex; gap: 8px; margin-top: 8px; }
+.note-card.trashed { opacity: 0.85; }
+.filters .spacer { flex: 1; }
+
+/* 通用“开启态”幽灵按钮(回收站等开关) */
+.btn-toggle-on { border-color: var(--green); color: var(--green-deep); background: rgba(46, 107, 76, 0.08); }
+
 /* ---------- 注释编辑底部操作(右下角“确认”) ---------- */
 .cc-card-actions {
   display: flex; align-items: center; justify-content: space-between;

@@ -36,6 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export interface NoteFilter {
   q?: string;
   folder?: number;
+  deleted?: boolean;
 }
 
 export type NotePatch = Partial<NoteInput> & { comments?: CommentCard[] };
@@ -90,6 +91,7 @@ export const api = {
     const qs = new URLSearchParams();
     if (filter.q) qs.set("q", filter.q);
     if (typeof filter.folder === "number") qs.set("folder", String(filter.folder));
+    if (filter.deleted) qs.set("deleted", "1");
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return request(`/api/notes${suffix}`);
   },
@@ -104,6 +106,24 @@ export const api = {
 
   deleteNote: (id: number): Promise<void> =>
     request(`/api/notes/${id}`, { method: "DELETE" }),
+
+  restoreNote: (id: number): Promise<Note> =>
+    request(`/api/notes/${id}/restore`, { method: "POST" }),
+
+  purgeNote: (id: number): Promise<void> =>
+    request(`/api/notes/${id}/purge`, { method: "DELETE" }),
+
+  emptyTrash: (): Promise<{ removed: number }> =>
+    request("/api/notes/trash/empty", { method: "POST" }),
+
+  uploadAttachment: (noteId: number, file: File): Promise<Note> => {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    return request(`/api/notes/${noteId}/files`, { method: "POST", body: fd });
+  },
+
+  deleteAttachment: (noteId: number, token: string): Promise<void> =>
+    request(`/api/notes/${noteId}/files/${token}`, { method: "DELETE" }),
 
   listFolders: (): Promise<Folder[]> => request("/api/folders"),
 

@@ -49,6 +49,13 @@ export interface EventInput {
 
 export type EventPatch = Partial<EventInput>;
 
+export interface NoteFile {
+  id: string;
+  name: string;
+  size: number;
+  added_at: number;
+}
+
 export interface Note {
   id: number;
   title: string;
@@ -60,6 +67,9 @@ export interface Note {
   source_snapshot: string;
   folder_id: number | null;
   folder_name?: string;
+  deleted?: boolean;
+  deleted_at?: number | null;
+  files?: NoteFile[];
   created_at: number;
   updated_at: number;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { api } from "../api/client";
 import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
@@ -34,6 +34,12 @@ function formatDate(epoch: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** 用于右键菜单里预览段落内容。 */
 function snippetOf(block: Block): string {
   if (block.kind === "heading" || block.kind === "para") return block.text;
@@ -45,10 +51,14 @@ function snippetOf(block: Block): string {
 export default function NoteView() {
   const noteId = useAppStore((s) => s.activeNoteId);
   const setView = useAppStore((s) => s.setView);
+  const openNote = useAppStore((s) => s.openNote);
 
   const [note, setNote] = useState<Note | null>(null);
   const [editing, setEditing] = useState(false);
   const [draftText, setDraftText] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [pointDrafts, setPointDrafts] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [question, setQuestion] = useState("");
@@ -100,7 +110,12 @@ export default function NoteView() {
       .then((n) => {
         setNote(n);
         setDraftText(n.content);
-        setEditing(false);
+        setTitleDraft(n.title);
+        setSummaryDraft(n.summary || "");
+        setPointDrafts(n.points || []);
+        // 空白笔记(如“＋ 新建笔记”)打开后直接进入编辑
+        const blank = !n.content.trim() && !n.summary.trim();
+        setEditing(blank);
         setComments(n.comments || []);
         setCommentsDirty(false);
         setSaveState("idle");
@@ -241,12 +256,27 @@ export default function NoteView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragId]);
 
+  function startEdit() {
+    if (!note) return;
+    setDraftText(note.content);
+    setTitleDraft(note.title);
+    setSummaryDraft(note.summary || "");
+    setPointDrafts(note.points || []);
+    setEditing(true);
+    setError("");
+  }
+
   async function saveEdit() {
     if (!note) return;
     setSaving(true);
     setError("");
     try {
-      const updated = await api.updateNote(note.id, { content: draftText });
+      const updated = await api.updateNote(note.id, {
+        title: titleDraft.trim() || "无标题",
+        summary: summaryDraft.trim(),
+        content: draftText,
+        points: pointDrafts.map((p) => p.trim()).filter(Boolean),
+      });
       setNote(updated);
       setEditing(false);
     } catch (e) {
@@ -254,6 +284,59 @@ export default function NoteView() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function patchPoint(index: number, value: string) {
+    setPointDrafts((list) => list.map((p, i) => (i === index ? value : p)));
+  }
+
+  function addPoint() {
+    setPointDrafts((list) => [...list, ""]);
+  }
+
+  function removePoint(index: number) {
+    setPointDrafts((list) => list.filter((_, i) => i !== index));
+  }
+
+  async function addAttachmentFile(file: File | null) {
+    if (!note || !file) return;
+    setError("");
+    try {
+      const updated = await api.uploadAttachment(note.id, file);
+      setNote(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "上传失败");
+    }
+  }
+
+  async function removeAttachment(token: string) {
+    if (!note) return;
+    if (!window.confirm("删除这个附件？原文件将从数据目录移除。")) return;
+    try {
+      await api.deleteAttachment(note.id, token);
+      const updated = await api.getNote(note.id);
+      if (updated) setNote(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
+  function copyNoteLink() {
+    if (!note) return;
+    const text = `[${note.title}](rednote://note/${note.id})`;
+    const nav = navigator as Navigator & { clipboard?: { writeText: (t: string) => Promise<void> } };
+    if (nav.clipboard?.writeText) {
+      nav.clipboard.writeText(text).catch(() => {});
+    }
+  }
+
+  /** 笔记正文里的互链点击：跳转到对应笔记 */
+  function onNoteDocClick(e: ReactMouseEvent) {
+    const anchor = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="rednote://note/"]');
+    if (!anchor) return;
+    e.preventDefault();
+    const m = /rednote:\/\/note\/(\d+)/.exec(anchor.getAttribute("href") || "");
+    if (m) openNote(Number(m[1]));
   }
 
   async function assignFolder(value: string) {
@@ -271,7 +354,7 @@ export default function NoteView() {
 
   async function removeNote() {
     if (!note) return;
-    if (!window.confirm("确定删除这篇笔记吗？此操作不可恢复。")) return;
+    if (!window.confirm("把这篇笔记移入回收站？可随时从回收站恢复。")) return;
     try {
       await api.deleteNote(note.id);
       setView("library");
@@ -594,11 +677,61 @@ export default function NoteView() {
         )}
 
         {editing ? (
-          <textarea
-            value={draftText}
-            onChange={(e) => setDraftText(e.target.value)}
-            aria-label="笔记正文编辑区"
-          />
+          <div className="note-edit-panel">
+            <label className="edit-field">
+              <span>标题</span>
+              <input
+                type="text"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                aria-label="笔记标题"
+              />
+            </label>
+            <label className="edit-field">
+              <span>摘要</span>
+              <textarea
+                value={summaryDraft}
+                onChange={(e) => setSummaryDraft(e.target.value)}
+                aria-label="笔记摘要"
+                placeholder="一句话概括这篇笔记…（可留空）"
+              />
+            </label>
+            <div className="edit-field">
+              <span>要点</span>
+              <div className="edit-points">
+                {pointDrafts.map((p, i) => (
+                  <div className="edit-point" key={i}>
+                    <input
+                      type="text"
+                      value={p}
+                      onChange={(e) => patchPoint(i, e.target.value)}
+                      placeholder={`要点 ${i + 1}`}
+                      aria-label={`要点${i + 1}`}
+                    />
+                    <button
+                      className="chip-op danger"
+                      aria-label={`删除要点${i + 1}`}
+                      onClick={() => removePoint(i)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button className="btn btn-ghost btn-sm" onClick={addPoint}>
+                  ＋ 添加要点
+                </button>
+              </div>
+            </div>
+            <label className="edit-field">
+              <span>正文</span>
+              <textarea
+                className="edit-content"
+                value={draftText}
+                onChange={(e) => setDraftText(e.target.value)}
+                aria-label="笔记正文编辑区"
+              />
+            </label>
+          </div>
         ) : (
           <div className="annotated-article" style={{ "--reader-scale": readerScale } as CSSProperties} data-testid="reader-article">
             <div className="reader-tools" role="toolbar" aria-label="阅读工具">
@@ -633,6 +766,7 @@ export default function NoteView() {
             <div
               ref={bodyRef}
               className={`body annotated${dragId ? " dragging" : ""}`}
+              onClick={onNoteDocClick}
               onMouseUp={onBodyMouseUp}
               onContextMenu={(e) => {
                 if (editing) return;
@@ -918,14 +1052,65 @@ export default function NoteView() {
           </div>
         )}
 
+        {!editing && (
+          <section className="note-attachments" aria-label="附件">
+            <div className="att-head">
+              <span className="lbl">附件（{note.files?.length ?? 0}）</span>
+              <span className="spacer" />
+              <label className="btn btn-ghost btn-sm att-add">
+                添加文件
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md,.epub,.csv,.xlsx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
+                  aria-label="添加附件"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    addAttachmentFile(f).finally(() => {
+                      e.target.value = "";
+                    });
+                  }}
+                />
+              </label>
+            </div>
+            {!note.files || note.files.length === 0 ? (
+              <p className="hint">把论文 PDF / DOCX 等原始文件归档到这里（存入数据目录，不随正文丢失）。</p>
+            ) : (
+              <ul className="att-list">
+                {note.files.map((file) => (
+                  <li key={file.id}>
+                    <a href={`/api/notes/${note.id}/files/${file.id}`} download={file.name}>
+                      {file.name}
+                    </a>
+                    <span className="att-meta">
+                      {formatSize(file.size)} · {formatDate(file.added_at)}
+                    </span>
+                    <button
+                      className="chip-op danger"
+                      aria-label={`删除附件${file.name}`}
+                      onClick={() => removeAttachment(file.id)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
         <div className="note-actions">
           {editing ? (
             <button className="btn btn-primary" onClick={saveEdit} disabled={saving}>
               {saving ? "保存中…" : "保存修改"}
             </button>
           ) : (
-            <button className="btn btn-ghost" onClick={() => setEditing(true)}>
+            <button className="btn btn-ghost" onClick={startEdit}>
               编辑
+            </button>
+          )}
+          {!editing && (
+            <button className="btn btn-ghost" onClick={copyNoteLink}>
+              复制笔记链接
             </button>
           )}
           <a
