@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -313,8 +314,11 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
     def list_notes(
         q: str = Query(default=""),
         folder: int | None = Query(default=None),
+        deleted: int = Query(default=0),
     ) -> list[dict[str, Any]]:
-        return notes_service.list_notes(_path(), q=q.strip(), folder=folder)
+        return notes_service.list_notes(
+            _path(), q=q.strip(), folder=folder, deleted=bool(deleted)
+        )
 
     @app.get("/api/notes/{note_id}")
     def get_note(note_id: int) -> dict[str, Any]:
@@ -340,8 +344,52 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
 
     @app.delete("/api/notes/{note_id}", status_code=204)
     def delete_note(note_id: int) -> None:
+        """移入回收站(软删除)。"""
         if not notes_service.delete_note(_path(), note_id):
             raise HTTPException(status_code=404, detail="笔记不存在")
+
+    @app.post("/api/notes/{note_id}/restore")
+    def restore_note(note_id: int) -> dict[str, Any]:
+        note = notes_service.restore_note(_path(), note_id)
+        if not note:
+            raise HTTPException(status_code=404, detail="不在回收站或笔记不存在")
+        return note
+
+    @app.delete("/api/notes/{note_id}/purge", status_code=204)
+    def purge_note(note_id: int) -> None:
+        if not notes_service.purge_note(_path(), note_id):
+            raise HTTPException(status_code=404, detail="笔记不存在")
+
+    @app.post("/api/notes/trash/empty")
+    def empty_trash() -> dict[str, int]:
+        return {"removed": notes_service.empty_trash(_path())}
+
+    # ---- 附件归档
+
+    @app.post("/api/notes/{note_id}/files")
+    async def add_attachment(note_id: int, file: UploadFile = File(...)) -> dict[str, Any]:
+        data = await file.read()
+        try:
+            return notes_service.add_attachment(_path(), note_id, file.filename or "file", data)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/notes/{note_id}/files/{token}")
+    def get_attachment(note_id: int, token: str) -> Response:
+        found = notes_service.attachment_file(_path(), note_id, token)
+        if not found:
+            raise HTTPException(status_code=404, detail="附件不存在")
+        path, name = found
+        quoted = urllib.parse.quote(name)
+        return FileResponse(
+            path,
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quoted}"},
+        )
+
+    @app.delete("/api/notes/{note_id}/files/{token}", status_code=204)
+    def delete_attachment(note_id: int, token: str) -> None:
+        if not notes_service.remove_attachment(_path(), note_id, token):
+            raise HTTPException(status_code=404, detail="附件不存在")
 
     # ------------------------------------------------ 收藏夹
 

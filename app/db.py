@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS notes (
     source_url      TEXT NOT NULL DEFAULT '',
     source_snapshot TEXT NOT NULL DEFAULT '',
     folder_id       INTEGER REFERENCES folders(id) ON DELETE SET NULL,
+    deleted_at      INTEGER,                        -- 回收站：非空=已移入回收站
+    files           TEXT NOT NULL DEFAULT '[]',     -- 附件元数据 JSON
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL
 );
@@ -125,6 +127,11 @@ def init_db(db_path: str | Path) -> None:
                 "ALTER TABLE notes ADD COLUMN folder_id INTEGER "
                 "REFERENCES folders(id) ON DELETE SET NULL"
             )
+        # 2b) notes 补 deleted_at(回收站) 与 files(附件) 列
+        if "deleted_at" not in cols:
+            conn.execute("ALTER TABLE notes ADD COLUMN deleted_at INTEGER")
+        if "files" not in cols:
+            conn.execute("ALTER TABLE notes ADD COLUMN files TEXT NOT NULL DEFAULT '[]'")
         # 3) 彻底移除标签体系(含历史数据)
         conn.execute("DROP TABLE IF EXISTS note_tags")
         conn.execute("DROP TABLE IF EXISTS tags")
