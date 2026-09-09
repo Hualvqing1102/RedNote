@@ -176,4 +176,12 @@ export const api = {
     api_key?: string;
   }): Promise<{ ok: boolean; reply: string }> =>
     request("/api/settings/test", { method: "POST", body: JSON.stringify(cfg) }),
+
+  getStorage: (): Promise<{ dir: string; anchor: string }> => request("/api/settings/storage"),
+
+  setStorage: (path: string): Promise<{ moved: string[]; dir: string; restart: boolean }> =>
+    request("/api/settings/storage", { method: "PUT", body: JSON.stringify({ path }) }),
+
+  resetStorage: (): Promise<{ restart: boolean; dir: string }> =>
+    request("/api/settings/storage", { method: "DELETE" }),
 };

@@ -10,6 +10,9 @@ vi.mock("../api/client", () => ({
     getSettings: vi.fn(),
     saveSettings: vi.fn(),
     testProvider: vi.fn(),
+    getStorage: vi.fn(),
+    setStorage: vi.fn(),
+    resetStorage: vi.fn(),
   },
 }));
 
@@ -41,6 +44,20 @@ describe("SettingsView", () => {
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(MOCK_DEFAULTS);
     vi.mocked(api.saveSettings).mockReset();
     vi.mocked(api.testProvider).mockReset();
+    vi.mocked(api.getStorage).mockReset().mockResolvedValue({ dir: "C:\\默认\\RedNote", anchor: "C:\\默认" });
+    vi.mocked(api.setStorage).mockReset().mockResolvedValue({ moved: ["rednote.db"], dir: "D:\\Notes", restart: true });
+    vi.mocked(api.resetStorage).mockReset().mockResolvedValue({ restart: true, dir: "C:\\默认\\RedNote" });
+  });
+
+  it("展示数据存储位置并可迁移", async () => {
+    render(<SettingsView />);
+    await screen.findByText("本地规则（Mock）");
+
+    fireEvent.change(screen.getByLabelText("新数据目录路径"), { target: { value: "D:\\MyNotes" } });
+    fireEvent.click(screen.getByRole("button", { name: "迁移并重启" }));
+
+    await waitFor(() => expect(api.setStorage).toHaveBeenCalledWith("D:\\MyNotes"));
+    expect(await screen.findByText(/已迁移到 D:\\Notes/)).toBeInTheDocument();
   });
 
   it("默认展示本地规则与隐私说明", async () => {

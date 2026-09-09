@@ -47,6 +47,79 @@ export default function SettingsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 数据存储位置
+  const [storageDir, setStorageDir] = useState("");
+  const [newPath, setNewPath] = useState("");
+  const [storageBusy, setStorageBusy] = useState(false);
+  const [storageMsg, setStorageMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    api
+      .getStorage()
+      .then((g) => {
+        setStorageDir(g.dir);
+        setNewPath(g.dir);
+      })
+      .catch(() => {});
+  }, []);
+
+  function desktopBridge(): { choose_folder?: () => Promise<unknown> } | undefined {
+    const anyWin = window as unknown as { pywebview?: { api?: never } };
+    return anyWin.pywebview?.api as { choose_folder?: () => Promise<unknown> } | undefined;
+  }
+
+  async function chooseStorageFolder() {
+    const b = desktopBridge();
+    if (!b?.choose_folder) {
+      setStorageMsg({ ok: false, text: "请手动粘贴目标文件夹路径（浏览器模式不支持选文件夹）" });
+      return;
+    }
+    try {
+      const res = (await b.choose_folder()) as { ok?: boolean; path?: string; cancelled?: boolean; error?: string };
+      if (res && res.ok && res.path) {
+        setNewPath(res.path);
+        setStorageMsg(null);
+      }
+    } catch {
+      setStorageMsg({ ok: false, text: "无法打开文件夹选择框" });
+    }
+  }
+
+  async function saveStorageLocation() {
+    const path = newPath.trim();
+    if (!path) {
+      setStorageMsg({ ok: false, text: "请填写目标文件夹路径" });
+      return;
+    }
+    setStorageBusy(true);
+    setStorageMsg(null);
+    try {
+      const r = await api.setStorage(path);
+      setStorageDir(r.dir);
+      setStorageMsg({
+        ok: true,
+        text: `已迁移到 ${r.dir}（原数据保留未删）。请重启 RedNote 生效。`,
+      });
+    } catch (e) {
+      setStorageMsg({ ok: false, text: e instanceof Error ? e.message : "迁移失败" });
+    } finally {
+      setStorageBusy(false);
+    }
+  }
+
+  async function resetStorageLocation() {
+    setStorageBusy(true);
+    setStorageMsg(null);
+    try {
+      const r = await api.resetStorage();
+      setStorageMsg({ ok: true, text: `已恢复默认位置。请重启 RedNote 生效（默认：${r.dir}）。` });
+    } catch (e) {
+      setStorageMsg({ ok: false, text: e instanceof Error ? e.message : "重置失败" });
+    } finally {
+      setStorageBusy(false);
+    }
+  }
+
   function applyResponse(r: SettingsResponse) {
     setResp(r);
     setProvider(r.settings.provider);
@@ -254,6 +327,51 @@ export default function SettingsView() {
           <button className="btn btn-primary" onClick={save} disabled={busy}>
             {busy ? "保存中…" : "保存设置"}
           </button>
+        </div>
+      </section>
+
+      <section className="panel storage-panel">
+        <div className="panel-head">
+          <span className="lbl">数据存储位置</span>
+        </div>
+        <div className="data-body">
+          <p>
+            笔记数据默认存在你的用户目录。可自选到其它文件夹（如 D 盘、同步盘）：
+            保存后会把 <code>rednote.db / settings.json / attachments</code> 复制过去，
+            <strong>原数据保留不删除</strong>；重启 RedNote 后使用新位置。
+          </p>
+          <div className="storage-row">
+            <span className="field-label">当前数据目录</span>
+            <code className="storage-dir">{storageDir || "…"}</code>
+          </div>
+          <label className="field storage-new">
+            <span>新目录路径</span>
+            <input
+              type="text"
+              value={newPath}
+              onChange={(e) => setNewPath(e.target.value)}
+              placeholder="C:\Users\你\AppData\Roaming\RedNote 或 D:\Notes"
+              aria-label="新数据目录路径"
+            />
+          </label>
+          <div className="data-actions">
+            {desktopBridge()?.choose_folder && (
+              <button className="btn btn-ghost btn-sm" onClick={chooseStorageFolder}>
+                选择文件夹
+              </button>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={saveStorageLocation} disabled={storageBusy}>
+              {storageBusy ? "处理中…" : "迁移并重启"}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={resetStorageLocation} disabled={storageBusy}>
+              恢复默认位置
+            </button>
+          </div>
+          {storageMsg && (
+            <div className={`storage-note ${storageMsg.ok ? "ok" : "err"}`} role={storageMsg.ok ? "status" : "alert"}>
+              {storageMsg.text}
+            </div>
+          )}
         </div>
       </section>
 
