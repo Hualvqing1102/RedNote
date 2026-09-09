@@ -8,7 +8,6 @@ import type { Note } from "../types";
 vi.mock("../api/client", () => ({
   api: {
     importAgent: vi.fn(),
-    uploadAttachment: vi.fn(),
   },
 }));
 
@@ -29,69 +28,15 @@ function note(id = 5): Note {
   };
 }
 
-describe("CollectView 从 Agent 导入", () => {
+describe("CollectView 拖入 Markdown 原样存档", () => {
   beforeEach(() => {
     useAppStore.setState({ view: "collect", activeNoteId: null });
     vi.mocked(api.importAgent).mockReset().mockResolvedValue(note(5));
-    vi.mocked(api.uploadAttachment).mockReset().mockResolvedValue(note(5));
   });
 
-  it("展开表单，粘贴讲解正文与来源后保存并跳转笔记库", async () => {
+  it("拖入/选择 .md：按首个标题命名并原样保存(含表格)，跳转笔记库", async () => {
     render(<CollectView />);
-    fireEvent.click(screen.getByRole("button", { name: "从 Agent 导入讲解 / 总结" }));
-
-    fireEvent.change(screen.getByLabelText("导入标题"), { target: { value: "上下文工程讲解" } });
-    fireEvent.change(screen.getByLabelText("导入来源网址"), {
-      target: { value: "https://www.anthropic.com/engineering/effective-context-engineering" },
-    });
-    fireEvent.change(screen.getByLabelText("导入来源名称"), {
-      target: { value: "Anthropic 官方文章" },
-    });
-    fireEvent.change(screen.getByLabelText("导入摘要"), { target: { value: "把上下文当工程设计" } });
-    fireEvent.change(screen.getByLabelText("导入要点"), { target: { value: "要点一\n要点二" } });
-    fireEvent.change(screen.getByLabelText("导入正文"), { target: { value: "# 讲解\n\n正文内容。" } });
-
-    fireEvent.click(screen.getByRole("button", { name: "保存到笔记" }));
-
-    await waitFor(() => {
-      expect(api.importAgent).toHaveBeenCalledWith({
-        title: "上下文工程讲解",
-        summary: "把上下文当工程设计",
-        points: ["要点一", "要点二"],
-        content: "# 讲解\n\n正文内容。",
-        source_url: "https://www.anthropic.com/engineering/effective-context-engineering",
-        source_name: "Anthropic 官方文章",
-      });
-      expect(api.uploadAttachment).not.toHaveBeenCalled();
-      expect(useAppStore.getState().view).toBe("library");
-    });
-  });
-
-  it("选原文件时保存后作为附件归档", async () => {
-    render(<CollectView />);
-    fireEvent.click(screen.getByRole("button", { name: "从 Agent 导入讲解 / 总结" }));
-    fireEvent.change(screen.getByLabelText("导入正文"), { target: { value: "讲解正文" } });
-
-    const fileInput = screen.getByLabelText("导入原文件") as HTMLInputElement;
-    const file = new File(["x"], "paper.pdf", { type: "application/pdf" });
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    fireEvent.click(screen.getByRole("button", { name: "保存到笔记" }));
-
-    await waitFor(() => expect(api.uploadAttachment).toHaveBeenCalledWith(5, file));
-  });
-
-  it("正文为空时提示", async () => {
-    render(<CollectView />);
-    fireEvent.click(screen.getByRole("button", { name: "从 Agent 导入讲解 / 总结" }));
-    fireEvent.click(screen.getByRole("button", { name: "保存到笔记" }));
-    expect(await screen.findByText("请填写讲解/总结正文")).toBeInTheDocument();
-    expect(api.importAgent).not.toHaveBeenCalled();
-  });
-
-  it("拖入/选择 Agent 的 Markdown 文件：按首个标题命名并原样保存(含表格)", async () => {
-    render(<CollectView />);
-    const input = screen.getByLabelText("选择 Agent 的 Markdown 文件") as HTMLInputElement;
+    const input = screen.getByLabelText("选择本地文档") as HTMLInputElement;
     const md = "# 上下文工程讲解\n\n正文一段。\n\n| 列1 | 列2 |\n|---|---|\n| a | b |\n";
     const file = new File([md], "agent.md", { type: "text/markdown" });
 
@@ -107,11 +52,17 @@ describe("CollectView 从 Agent 导入", () => {
     });
   });
 
-  it("非 Markdown 文件提示", async () => {
+  it("无标题时用文件名作为标题", async () => {
     render(<CollectView />);
-    const input = screen.getByLabelText("选择 Agent 的 Markdown 文件") as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [new File(["x"], "paper.pdf")] } });
-    expect(await screen.findByText(/请选择 Agent 输出的 Markdown 文件/)).toBeInTheDocument();
-    expect(api.importAgent).not.toHaveBeenCalled();
+    const input = screen.getByLabelText("选择本地文档") as HTMLInputElement;
+    const file = new File(["没有标题的正文"], "我的讲解.md", { type: "text/markdown" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(api.importAgent).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "我的讲解", content: "没有标题的正文", source_name: "我的讲解.md" })
+      );
+    });
   });
 });
