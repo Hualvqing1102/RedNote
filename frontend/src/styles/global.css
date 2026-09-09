@@ -784,119 +784,6 @@ textarea {
   margin-top: 18px;
 }
 
-.ask-panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 420px;
-  max-height: 620px;
-}
-.ask-panel .head {
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--line);
-}
-.ask-panel .head .lbl {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.6px;
-  color: var(--green);
-  text-transform: uppercase;
-}
-.thread {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.msg {
-  max-width: 90%;
-  padding: 10px 13px;
-  border-radius: 10px;
-  font-size: 13.5px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.msg.user {
-  align-self: flex-end;
-  background: var(--green);
-  color: #fff;
-  border-bottom-right-radius: 3px;
-}
-.msg.ai {
-  align-self: flex-start;
-  background: #eff1ea;
-  border: 1px solid var(--line);
-  border-bottom-left-radius: 3px;
-}
-.typing {
-  display: inline-flex;
-  gap: 3px;
-  padding: 4px 2px;
-}
-.typing span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted);
-  animation: blink 1.2s infinite;
-}
-.typing span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.typing span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-@keyframes blink {
-  0%,
-  80%,
-  100% {
-    opacity: 0.25;
-  }
-  40% {
-    opacity: 1;
-  }
-}
-.ask-input {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid var(--line);
-}
-.ask-input input {
-  flex: 1;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-size: 13.5px;
-}
-.ask-input input:focus {
-  outline: 2px solid var(--green);
-  outline-offset: 0;
-}
-.ask-input .send {
-  background: var(--green);
-  color: #fff;
-  border-radius: 8px;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.ask-input .send:hover {
-  background: var(--green-deep);
-}
-.ask-input .send:disabled {
-  opacity: 0.5;
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
@@ -997,9 +884,6 @@ textarea {
 .engine-note .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
 .engine-note.warn { color: #8a6216; }
 .engine-note.warn .dot { background: #d99a2b; }
-
-/* 追问面板内的引擎提示 */
-.ask-panel .engine-note { padding: 0 16px 8px; margin-top: 0; font-size: 12px; }
 
 /* ---------- 摘要/要点块(详情页)与导出 ---------- */
 a.btn { text-decoration: none; }
@@ -1453,7 +1337,6 @@ a.btn { text-decoration: none; }
 .result-grid > *,
 .panel,
 .note-doc,
-.ask-panel,
 .inline-comment,
 .annotate-view { min-width: 0; }
 
