@@ -68,6 +68,20 @@ class NoteIn(BaseModel):
     folder_id: int | None = None
 
 
+class AgentImportIn(BaseModel):
+    """Agent 写入桥：把外部(如 DSH)的讲解/总结结果归档为 RedNote 笔记。
+
+    正文只放讲解/总结内容；来源以 source_url/source_name 保留(原文件可随后作为附件上传)。
+    """
+    title: str = ""
+    summary: str = ""
+    points: list[str] = []
+    content: str
+    source_url: str = ""
+    source_name: str = ""
+    folder_id: int | None = None
+
+
 class NotePatch(BaseModel):
     title: str | None = None
     summary: str | None = None
@@ -330,6 +344,25 @@ def create_app(db_path: str | None = None, settings_path: str | None = None) -> 
     @app.post("/api/notes", status_code=201)
     def create_note(payload: NoteIn) -> dict[str, Any]:
         return notes_service.create_note(_path(), payload.model_dump())
+
+    @app.post("/api/import/agent", status_code=201)
+    def import_agent(payload: AgentImportIn) -> dict[str, Any]:
+        """Agent 写入桥：接收讲解/总结结果直接落库为笔记。"""
+        content = (payload.content or "").strip()
+        if not content:
+            raise HTTPException(status_code=400, detail="内容不能为空")
+        return notes_service.create_note(
+            _path(),
+            {
+                "title": (payload.title or "").strip(),
+                "summary": (payload.summary or "").strip(),
+                "content": content,
+                "points": [str(p).strip() for p in payload.points if str(p).strip()],
+                "source_url": (payload.source_url or "").strip(),
+                "source_snapshot": (payload.source_name or "").strip(),
+                "folder_id": payload.folder_id,
+            },
+        )
 
     @app.patch("/api/notes/{note_id}")
     def update_note(note_id: int, payload: NotePatch) -> dict[str, Any]:
