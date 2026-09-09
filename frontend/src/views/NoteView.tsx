@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { api } from "../api/client";
+import ConfirmButton from "../components/ConfirmButton";
 import { describeEngine, sendsToCloud } from "../lib/provider";
 import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
 import { normalizedSelection, rowIndexOf } from "../lib/selection";
@@ -48,6 +49,44 @@ function snippetOf(block: Block): string {
   return "";
 }
 
+// ---------------- 文末「引用与链接」块(像论文参考文献) ----------------
+
+interface RefEntry {
+  title: string;
+  url: string;
+}
+
+const REF_HEADING = "## 引用";
+
+/** 从正文里解析末尾的引用列表(行形如 - [标题](url))。 */
+function refsFromMarkdown(markdown: string): RefEntry[] {
+  const idx = markdown.indexOf(REF_HEADING);
+  if (idx < 0) return [];
+  const tail = markdown.slice(idx + REF_HEADING.length).split("\n");
+  const out: RefEntry[] = [];
+  for (const line of tail) {
+    const m = /^\s*[-*]\s+\[([^\]]*)\]\(([^)\s]+)\)\s*$/.exec(line);
+    if (m) out.push({ title: m[1], url: m[2] });
+  }
+  return out;
+}
+
+/** 去掉正文末尾已有的引用块(保存前重生成，避免重复)。 */
+function stripRefSection(markdown: string): string {
+  const idx = markdown.indexOf(REF_HEADING);
+  if (idx < 0) return markdown;
+  return markdown.slice(0, idx).trimEnd();
+}
+
+function refsToMarkdown(refs: RefEntry[]): string {
+  const valid = refs
+    .map((r) => ({ title: r.title.trim(), url: r.url.trim() }))
+    .filter((r) => r.url && /^(https?:|rednote:)/i.test(r.url));
+  if (valid.length === 0) return "";
+  const lines = valid.map((r) => `- [${r.title || r.url}](${r.url})`);
+  return `\n\n${REF_HEADING}\n\n${lines.join("\n")}\n`;
+}
+
 export default function NoteView() {
   const noteId = useAppStore((s) => s.activeNoteId);
   const setView = useAppStore((s) => s.setView);
@@ -59,6 +98,8 @@ export default function NoteView() {
   const [titleDraft, setTitleDraft] = useState("");
   const [summaryDraft, setSummaryDraft] = useState("");
   const [pointDrafts, setPointDrafts] = useState<string[]>([]);
+  const [refsDraft, setRefsDraft] = useState<RefEntry[]>([]);
+  const [refOptions, setRefOptions] = useState<Note[]>([]);
   const [saving, setSaving] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [question, setQuestion] = useState("");
@@ -113,6 +154,7 @@ export default function NoteView() {
         setTitleDraft(n.title);
         setSummaryDraft(n.summary || "");
         setPointDrafts(n.points || []);
+        setRefsDraft(refsFromMarkdown(n.content));
         // 空白笔记(如“＋ 新建笔记”)打开后直接进入编辑
         const blank = !n.content.trim() && !n.summary.trim();
         setEditing(blank);
@@ -262,19 +304,27 @@ export default function NoteView() {
     setTitleDraft(note.title);
     setSummaryDraft(note.summary || "");
     setPointDrafts(note.points || []);
+    setRefsDraft(refsFromMarkdown(note.content));
     setEditing(true);
     setError("");
+    // 供“＋ 关联笔记”选择的候选笔记
+    api
+      .listNotes()
+      .then((all) => setRefOptions(all.filter((n) => n.id !== note.id)))
+      .catch(() => setRefOptions([]));
   }
 
   async function saveEdit() {
     if (!note) return;
     setSaving(true);
     setError("");
+    const body = stripRefSection(draftText).trimEnd();
+    const content = body + refsToMarkdown(refsDraft);
     try {
       const updated = await api.updateNote(note.id, {
         title: titleDraft.trim() || "无标题",
         summary: summaryDraft.trim(),
-        content: draftText,
+        content,
         points: pointDrafts.map((p) => p.trim()).filter(Boolean),
       });
       setNote(updated);
@@ -298,6 +348,25 @@ export default function NoteView() {
     setPointDrafts((list) => list.filter((_, i) => i !== index));
   }
 
+  function patchRef(index: number, patch: Partial<RefEntry>) {
+    setRefsDraft((list) => list.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  function addRefWeb() {
+    setRefsDraft((list) => [...list, { title: "", url: "" }]);
+  }
+
+  function addRefNote(id: number) {
+    if (!id) return;
+    const n = refOptions.find((item) => item.id === id);
+    if (!n) return;
+    setRefsDraft((list) => [...list, { title: n.title, url: `rednote://note/${n.id}` }]);
+  }
+
+  function removeRef(index: number) {
+    setRefsDraft((list) => list.filter((_, i) => i !== index));
+  }
+
   async function addAttachmentFile(file: File | null) {
     if (!note || !file) return;
     setError("");
@@ -311,7 +380,6 @@ export default function NoteView() {
 
   async function removeAttachment(token: string) {
     if (!note) return;
-    if (!window.confirm("删除这个附件？原文件将从数据目录移除。")) return;
     try {
       await api.deleteAttachment(note.id, token);
       const updated = await api.getNote(note.id);
@@ -354,7 +422,6 @@ export default function NoteView() {
 
   async function removeNote() {
     if (!note) return;
-    if (!window.confirm("把这篇笔记移入回收站？可随时从回收站恢复。")) return;
     try {
       await api.deleteNote(note.id);
       setView("library");
@@ -731,6 +798,57 @@ export default function NoteView() {
                 aria-label="笔记正文编辑区"
               />
             </label>
+
+            <div className="edit-field">
+              <span>引用与链接（保存后出现在文末，像论文参考文献）</span>
+              <div className="ref-tools">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={addRefWeb}>
+                  ＋ 添加网页链接
+                </button>
+                <select
+                  aria-label="关联笔记"
+                  value=""
+                  onChange={(e) => addRefNote(Number(e.target.value))}
+                >
+                  <option value="">＋ 关联一篇笔记…</option>
+                  {refOptions.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.title || `笔记 ${n.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {refsDraft.length > 0 && (
+                <ul className="ref-list">
+                  {refsDraft.map((r, i) => (
+                    <li key={i}>
+                      <input
+                        type="text"
+                        value={r.title}
+                        onChange={(e) => patchRef(i, { title: e.target.value })}
+                        placeholder="标题(网页链接可留空自动用网址)"
+                        aria-label={`引用标题${i + 1}`}
+                      />
+                      <input
+                        type="text"
+                        value={r.url}
+                        onChange={(e) => patchRef(i, { url: e.target.value })}
+                        placeholder="https://… 或 rednote://note/ID"
+                        aria-label={`引用链接${i + 1}`}
+                      />
+                      <button
+                        type="button"
+                        className="chip-op danger"
+                        aria-label={`删除引用${i + 1}`}
+                        onClick={() => removeRef(i)}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         ) : (
           <div className="annotated-article" style={{ "--reader-scale": readerScale } as CSSProperties} data-testid="reader-article">
@@ -1084,13 +1202,14 @@ export default function NoteView() {
                     <span className="att-meta">
                       {formatSize(file.size)} · {formatDate(file.added_at)}
                     </span>
-                    <button
-                      className="chip-op danger"
-                      aria-label={`删除附件${file.name}`}
-                      onClick={() => removeAttachment(file.id)}
+                    <ConfirmButton
+                      className="chip-op"
+                      title={`删除附件${file.name}`}
+                      confirmLabel="确认删除"
+                      onConfirm={() => removeAttachment(file.id)}
                     >
                       ×
-                    </button>
+                    </ConfirmButton>
                   </li>
                 ))}
               </ul>
@@ -1120,9 +1239,13 @@ export default function NoteView() {
           >
             导出 Markdown
           </a>
-          <button className="btn btn-ghost danger" onClick={removeNote}>
+          <ConfirmButton
+            className="btn btn-ghost danger"
+            confirmLabel="确认删除"
+            onConfirm={removeNote}
+          >
             删除
-          </button>
+          </ConfirmButton>
         </div>
       </div>
 

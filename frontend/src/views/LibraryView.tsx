@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import ConfirmButton from "../components/ConfirmButton";
 import { useAppStore } from "../store/useAppStore";
 import type { Folder, Note } from "../types";
 
@@ -61,7 +62,6 @@ export default function LibraryView() {
   }, [q, folderId, inTrash]);
 
   async function removeNote(id: number) {
-    if (!window.confirm("把这篇笔记移入回收站？可随时恢复。")) return;
     try {
       await api.deleteNote(id);
       setNotes((list) => list.filter((n) => n.id !== id));
@@ -80,7 +80,6 @@ export default function LibraryView() {
   }
 
   async function purgeNote(id: number) {
-    if (!window.confirm("彻底删除这篇笔记？不可恢复。")) return;
     try {
       await api.purgeNote(id);
       setTrashNotes((list) => list.filter((n) => n.id !== id));
@@ -90,7 +89,6 @@ export default function LibraryView() {
   }
 
   async function emptyTrash() {
-    if (!window.confirm("清空回收站？其中笔记将彻底删除，不可恢复。")) return;
     try {
       await api.emptyTrash();
       setTrashNotes([]);
@@ -158,7 +156,6 @@ export default function LibraryView() {
   }
 
   async function removeFolder(folder: Folder) {
-    if (!window.confirm(`删除收藏夹「${folder.name}」？其中的笔记会回到「全部」。`)) return;
     try {
       await api.deleteFolder(folder.id);
       if (folderId === folder.id) setFolderId(null);
@@ -212,9 +209,13 @@ export default function LibraryView() {
             <span className="hint">回收站：已删除的笔记可恢复，或彻底删除</span>
             <span className="spacer" />
             {trashNotes.length > 0 && (
-              <button className="btn btn-ghost btn-sm" onClick={emptyTrash}>
+              <ConfirmButton
+                className="btn btn-ghost btn-sm"
+                confirmLabel="确认清空"
+                onConfirm={emptyTrash}
+              >
                 清空回收站
-              </button>
+              </ConfirmButton>
             )}
           </div>
           {error && (
@@ -242,9 +243,13 @@ export default function LibraryView() {
                     >
                       恢复
                     </button>
-                    <button className="btn btn-ghost btn-sm danger" onClick={() => purgeNote(note.id)}>
+                    <ConfirmButton
+                      className="btn btn-ghost btn-sm"
+                      confirmLabel="确认彻底删除"
+                      onConfirm={() => purgeNote(note.id)}
+                    >
                       彻底删除
-                    </button>
+                    </ConfirmButton>
                   </div>
                 </article>
               ))}
@@ -286,14 +291,15 @@ export default function LibraryView() {
                 >
                   ✎
                 </button>
-                <button
-                  className="chip-op danger"
-                  aria-label={`删除收藏夹${f.name}`}
+                <ConfirmButton
+                  className="chip-op"
                   title="删除"
-                  onClick={() => removeFolder(f)}
+                  ariaLabel={`删除收藏夹${f.name}`}
+                  confirmLabel="确认删除"
+                  onConfirm={() => removeFolder(f)}
                 >
                   ×
-                </button>
+                </ConfirmButton>
               </>
             )}
           </span>
@@ -370,16 +376,14 @@ export default function LibraryView() {
                   ))}
                 </select>
               </div>
-              <button
+              <ConfirmButton
                 className="card-delete"
                 title="移入回收站"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeNote(note.id);
-                }}
+                confirmLabel="确认删除"
+                onConfirm={() => removeNote(note.id)}
               >
                 删除
-              </button>
+              </ConfirmButton>
             </article>
           ))}
         </div>

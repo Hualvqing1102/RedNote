@@ -78,29 +78,27 @@ describe("LibraryView 新建笔记与回收站", () => {
     expect(screen.queryByText("已删除的笔记")).not.toBeInTheDocument();
   });
 
-  it("回收站：可彻底删除单篇(需确认)", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("回收站：可彻底删除单篇(需两步确认)", async () => {
     render(<LibraryView />);
     await screen.findByText("Transformer 笔记");
     fireEvent.click(screen.getByRole("button", { name: "回收站" }));
     await screen.findByText("已删除的笔记");
 
     fireEvent.click(screen.getByRole("button", { name: "彻底删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认彻底删除" }));
     await waitFor(() => expect(api.purgeNote).toHaveBeenCalledWith(2));
     expect(screen.queryByText("已删除的笔记")).not.toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 
-  it("回收站：可一键清空(需确认)", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("回收站：可一键清空(需两步确认)", async () => {
     render(<LibraryView />);
     await screen.findByText("Transformer 笔记");
     fireEvent.click(screen.getByRole("button", { name: "回收站" }));
     await screen.findByText("已删除的笔记");
 
     fireEvent.click(screen.getByRole("button", { name: "清空回收站" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认清空" }));
     await waitFor(() => expect(api.emptyTrash).toHaveBeenCalled());
     expect(screen.queryByText("已删除的笔记")).not.toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 });

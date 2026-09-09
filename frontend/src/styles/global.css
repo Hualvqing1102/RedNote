@@ -1283,6 +1283,30 @@ a.btn { text-decoration: none; }
 /* 通用“开启态”幽灵按钮(回收站等开关) */
 .btn-toggle-on { border-color: var(--green); color: var(--green-deep); background: rgba(46, 107, 76, 0.08); }
 
+/* ---------- 原地两级确认删除 ---------- */
+.confirm-btn { cursor: pointer; }
+.confirm-inline { display: inline-flex; align-items: center; gap: 6px; }
+.confirm-inline .confirm {
+  padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.confirm-inline .yes { background: #a33; color: #fff; border: none; }
+.confirm-inline .yes:hover { background: #922; }
+.confirm-inline .no { background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.confirm-inline .no:hover { border-color: var(--muted); color: var(--ink); }
+
+/* ---------- 文末引用与链接编辑器 ---------- */
+.ref-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ref-tools select {
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); font-size: 13px; color: var(--ink);
+}
+.ref-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ref-list li { display: flex; gap: 6px; align-items: center; }
+.ref-list input {
+  flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 9px; font-size: 13px;
+}
+
 /* ---------- 注释编辑底部操作(右下角“确认”) ---------- */
 .cc-card-actions {
   display: flex; align-items: center; justify-content: space-between;

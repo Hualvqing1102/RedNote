@@ -84,14 +84,13 @@ describe("LibraryView", () => {
     expect(api.listFolders).toHaveBeenCalled();
   });
 
-  it("管理模式下可删除收藏夹", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("管理模式下可两步确认删除收藏夹", async () => {
     render(<LibraryView />);
     await screen.findByText("Transformer 笔记");
     fireEvent.click(screen.getByRole("button", { name: "管理" }));
     fireEvent.click(screen.getByRole("button", { name: "删除收藏夹工程" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(api.deleteFolder).toHaveBeenCalledWith(11));
-    confirmSpy.mockRestore();
   });
 
   it("空列表显示空态", async () => {
@@ -101,16 +100,16 @@ describe("LibraryView", () => {
     expect(document.body.textContent ?? "").toContain("没有匹配的笔记");
   });
 
-  it("删除笔记需确认并调用接口", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("删除笔记需两步确认并调用接口", async () => {
     render(<LibraryView />);
     await screen.findByText("Transformer 笔记");
 
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    // 原地变成“确认删除”，不再弹系统确认框
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(api.deleteNote).toHaveBeenCalledWith(1));
     await waitFor(() =>
       expect(screen.queryByText("Transformer 笔记")).not.toBeInTheDocument()
     );
-    confirmSpy.mockRestore();
   });
 });

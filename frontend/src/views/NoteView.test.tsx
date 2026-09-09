@@ -10,6 +10,7 @@ vi.mock("../api/client", () => ({
     getNote: vi.fn(),
     getSettings: vi.fn(),
     listFolders: vi.fn(),
+    listNotes: vi.fn(),
     updateNote: vi.fn(),
     ask: vi.fn(),
     deleteNote: vi.fn(),
@@ -46,6 +47,7 @@ describe("NoteView", () => {
     vi.mocked(api.getNote).mockReset().mockResolvedValue(NOTE);
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(ENGINE);
     vi.mocked(api.listFolders).mockReset().mockResolvedValue([]);
+    vi.mocked(api.listNotes).mockReset().mockResolvedValue([]);
     vi.mocked(api.updateNote).mockReset();
     vi.mocked(api.ask).mockReset();
     vi.mocked(api.deleteNote).mockReset();

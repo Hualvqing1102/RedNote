@@ -10,6 +10,7 @@ vi.mock("../api/client", () => ({
     getNote: vi.fn(),
     getSettings: vi.fn(),
     listFolders: vi.fn(),
+    listNotes: vi.fn(),
     updateNote: vi.fn(),
     ask: vi.fn(),
     agentSegment: vi.fn(),
@@ -53,6 +54,7 @@ describe("NoteView 手改字段 / 空白笔记 / 附件", () => {
     useAppStore.setState({ view: "note", activeNoteId: 1 });
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(ENGINE);
     vi.mocked(api.listFolders).mockReset().mockResolvedValue([]);
+    vi.mocked(api.listNotes).mockReset().mockResolvedValue([]);
     vi.mocked(api.getNote).mockReset().mockResolvedValue(mkNote());
     vi.mocked(api.updateNote).mockReset().mockImplementation((_id, patch) =>
       Promise.resolve(mkNote({ ...(patch as Partial<Note>) }))
@@ -113,9 +115,39 @@ describe("NoteView 手改字段 / 空白笔记 / 附件", () => {
     const link = await screen.findByRole("link", { name: "paper.pdf" });
     expect(link.getAttribute("href")).toBe("/api/notes/1/files/tok123");
 
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    fireEvent.click(screen.getByRole("button", { name: "删除附件paper.pdf" }));
+    fireEvent.click(screen.getByTitle("删除附件paper.pdf"));
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(api.deleteAttachment).toHaveBeenCalledWith(1, "tok123"));
-    confirmSpy.mockRestore();
+  });
+
+  it("编辑时添加引用(网页链接/笔记互链)并保存为文末引用块", async () => {
+    vi.mocked(api.listNotes).mockResolvedValue([
+      mkNote({ id: 2, title: "另一篇笔记" }),
+    ]);
+    render(<NoteView />);
+    await screen.findByText("Transformer 笔记");
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    // 等候选笔记选项异步加载完成
+    await waitFor(() => expect(screen.getByRole("option", { name: "另一篇笔记" })).toBeInTheDocument());
+
+    // 添加一条网页链接
+    fireEvent.click(screen.getByRole("button", { name: "＋ 添加网页链接" }));
+    fireEvent.change(screen.getByLabelText("引用标题1"), { target: { value: "原始论文" } });
+    fireEvent.change(screen.getByLabelText("引用链接1"), {
+      target: { value: "https://arxiv.org/abs/1706.03762" },
+    });
+
+    // 关联一篇笔记(通过下拉)
+    fireEvent.change(screen.getByLabelText("关联笔记"), { target: { value: "2" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await waitFor(() => {
+      const call = vi.mocked(api.updateNote).mock.calls.find(([id]) => id === 1);
+      expect(call).toBeTruthy();
+      const content = (call as unknown[])[1] as { content: string };
+      expect(content.content).toContain("## 引用");
+      expect(content.content).toContain("- [原始论文](https://arxiv.org/abs/1706.03762)");
+      expect(content.content).toContain(`- [另一篇笔记](rednote://note/2)`);
+    });
   });
 });
