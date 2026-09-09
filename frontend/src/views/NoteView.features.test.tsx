@@ -54,7 +54,7 @@ describe("NoteView 手改字段 / 空白笔记 / 附件", () => {
     vi.mocked(api.getSettings).mockReset().mockResolvedValue(ENGINE);
     vi.mocked(api.listFolders).mockReset().mockResolvedValue([]);
     vi.mocked(api.getNote).mockReset().mockResolvedValue(mkNote());
-    vi.mocked(api.updateNote).mockReset().mockImplementation((id, patch) =>
+    vi.mocked(api.updateNote).mockReset().mockImplementation((_id, patch) =>
       Promise.resolve(mkNote({ ...(patch as Partial<Note>) }))
     );
     vi.mocked(api.ask).mockReset();
