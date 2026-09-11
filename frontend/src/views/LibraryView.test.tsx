@@ -1,8 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import LibraryView from "./LibraryView";
 import type { Folder, Note } from "../types";
+
+type AnyWindow = Window & { pywebview?: unknown };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete (window as AnyWindow).pywebview;
+});
 
 vi.mock("../api/client", () => ({
   api: {
@@ -51,6 +58,34 @@ describe("LibraryView", () => {
     expect(screen.getByRole("button", { name: /工程/ })).toBeInTheDocument();
     const exportLink = screen.getByRole("link", { name: /导出全部 Markdown/ });
     expect(exportLink.getAttribute("href")).toBe("/api/export/notes.md");
+  });
+
+  it("桌面版点击导出走原生「另存为」并回显保存路径", async () => {
+    const saveFile = vi.fn().mockResolvedValue({ ok: true, path: "H:\\下载\\notes.md" });
+    (window as AnyWindow).pywebview = { api: { save_file: saveFile } };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([35, 32]), { status: 200 })
+    );
+
+    render(<LibraryView />);
+    await screen.findByText("Transformer 笔记");
+    fireEvent.click(screen.getByRole("link", { name: /导出全部 Markdown/ }));
+
+    await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1));
+    expect(saveFile.mock.calls[0][0]).toMatch(/^rednote-notes-\d{8}\.md$/);
+    expect(await screen.findByText(/已保存到 H:\\下载\\notes\.md/)).toBeInTheDocument();
+  });
+
+  it("桌面版导出被取消时给出提示", async () => {
+    const saveFile = vi.fn().mockResolvedValue({ ok: false, cancelled: true });
+    (window as AnyWindow).pywebview = { api: { save_file: saveFile } };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("x", { status: 200 }));
+
+    render(<LibraryView />);
+    await screen.findByText("Transformer 笔记");
+    fireEvent.click(screen.getByRole("link", { name: /导出全部 Markdown/ }));
+
+    expect(await screen.findByText("已取消保存")).toBeInTheDocument();
   });
 
   it("点击收藏夹后按 folder 过滤", async () => {

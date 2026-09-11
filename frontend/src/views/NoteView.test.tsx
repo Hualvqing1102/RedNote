@@ -1,9 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import NoteView from "./NoteView";
 import type { Note, SettingsResponse } from "../types";
+
+type AnyWindow = Window & { pywebview?: unknown };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete (window as AnyWindow).pywebview;
+});
 
 vi.mock("../api/client", () => ({
   api: {
@@ -66,6 +73,24 @@ describe("NoteView", () => {
     await screen.findByText("Transformer 笔记");
     const link = screen.getByRole("link", { name: "导出 Markdown" });
     expect(link.getAttribute("href")).toBe("/api/notes/1/export.md");
+    // 浏览器下载的文件名用笔记标题，不再是无从辨认的 note-1.md
+    expect(link.getAttribute("download")).toBe("Transformer 笔记.md");
+  });
+
+  it("桌面版导出走原生「另存为」，文件名用笔记标题", async () => {
+    const saveFile = vi.fn().mockResolvedValue({ ok: true, path: "H:\\下载\\笔记.md" });
+    (window as AnyWindow).pywebview = { api: { save_file: saveFile } };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([35]), { status: 200 })
+    );
+
+    render(<NoteView />);
+    await screen.findByText("Transformer 笔记");
+    fireEvent.click(screen.getByRole("link", { name: "导出 Markdown" }));
+
+    await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1));
+    expect(saveFile.mock.calls[0][0]).toBe("Transformer 笔记.md");
+    expect(await screen.findByText(/已保存到 H:\\下载\\笔记\.md/)).toBeInTheDocument();
   });
 
   it("编辑正文并保存修改", async () => {

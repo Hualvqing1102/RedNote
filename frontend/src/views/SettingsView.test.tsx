@@ -1,9 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import SettingsView from "./SettingsView";
 import type { SettingsActive, SettingsResponse } from "../types";
 import type { SettingsView as SettingsT } from "../types";
+
+type AnyWindow = Window & { pywebview?: unknown };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete (window as AnyWindow).pywebview;
+});
 
 vi.mock("../api/client", () => ({
   api: {
@@ -58,6 +65,22 @@ describe("SettingsView", () => {
 
     await waitFor(() => expect(api.setStorage).toHaveBeenCalledWith("D:\\MyNotes"));
     expect(await screen.findByText(/已迁移到 D:\\Notes/)).toBeInTheDocument();
+  });
+
+  it("桌面版备份数据库走原生「另存为」并回显保存路径", async () => {
+    const saveFile = vi.fn().mockResolvedValue({ ok: true, path: "H:\\下载\\backup.db" });
+    (window as AnyWindow).pywebview = { api: { save_file: saveFile } };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+    );
+
+    render(<SettingsView />);
+    await screen.findByText("本地规则（Mock）");
+    fireEvent.click(screen.getByRole("link", { name: /备份数据库/ }));
+
+    await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1));
+    expect(saveFile.mock.calls[0][0]).toMatch(/^rednote-backup-\d{8}\.db$/);
+    expect(await screen.findByText(/已保存到 H:\\下载\\backup\.db/)).toBeInTheDocument();
   });
 
   it("默认展示本地规则与隐私说明", async () => {

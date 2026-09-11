@@ -1,6 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { api } from "../api/client";
 import ConfirmButton from "../components/ConfirmButton";
+import {
+  dateStamp,
+  describeSaveResult,
+  desktopSaveFile,
+  saveExportViaDesktop,
+} from "../lib/desktopSave";
 import { useAppStore } from "../store/useAppStore";
 import type { Folder, Note } from "../types";
 
@@ -23,6 +29,23 @@ export default function LibraryView() {
   const [newName, setNewName] = useState("");
   const [managing, setManaging] = useState(false);
   const [inTrash, setInTrash] = useState(false);
+  const [exportMsg, setExportMsg] = useState("");
+
+  /** 桌面版走原生「另存为」并回显保存路径；浏览器保持 <a download> 下载。 */
+  async function exportAllNotes(e: MouseEvent<HTMLAnchorElement>) {
+    if (!desktopSaveFile()) return;
+    e.preventDefault();
+    setExportMsg("正在导出…");
+    try {
+      const result = await saveExportViaDesktop(
+        "/api/export/notes.md",
+        `rednote-notes-${dateStamp()}.md`
+      );
+      setExportMsg(result ? describeSaveResult(result) : "");
+    } catch (err) {
+      setExportMsg(err instanceof Error ? err.message : "导出失败");
+    }
+  }
 
   function refreshFolders() {
     api
@@ -185,9 +208,15 @@ export default function LibraryView() {
           className="btn btn-ghost btn-sm export-link"
           href="/api/export/notes.md"
           download="rednote-notes.md"
+          onClick={exportAllNotes}
         >
           导出全部 Markdown
         </a>
+        {exportMsg && (
+          <span className="hint export-hint" role="status">
+            {exportMsg}
+          </span>
+        )}
         <button className="btn btn-primary btn-sm" onClick={createBlankNote}>
           ＋ 新建笔记
         </button>

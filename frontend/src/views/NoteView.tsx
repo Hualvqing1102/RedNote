@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { api } from "../api/client";
 import ConfirmButton from "../components/ConfirmButton";
+import {
+  describeSaveResult,
+  desktopSaveFile,
+  noteExportName,
+  saveExportViaDesktop,
+} from "../lib/desktopSave";
 import { renderOneBlock, splitBlocks, type Block } from "../lib/markdown";
 import { normalizedSelection, rowIndexOf } from "../lib/selection";
 import { relocateComment, rowsFor } from "../lib/annotations";
@@ -96,6 +102,7 @@ export default function NoteView() {
   const [refOptions, setRefOptions] = useState<Note[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [exportMsg, setExportMsg] = useState("");
   const [foldersState, setFoldersState] = useState<Folder[]>([]);
 
   // 注释：内联锚定在正文段落之后
@@ -366,6 +373,22 @@ export default function NoteView() {
     const nav = navigator as Navigator & { clipboard?: { writeText: (t: string) => Promise<void> } };
     if (nav.clipboard?.writeText) {
       nav.clipboard.writeText(text).catch(() => {});
+    }
+  }
+
+  /** 导出当前笔记：桌面版走原生「另存为」并回显路径，浏览器保持 <a download>。 */
+  async function exportNote(e: ReactMouseEvent<HTMLAnchorElement>) {
+    if (!note || !desktopSaveFile()) return;
+    e.preventDefault();
+    setExportMsg("正在导出…");
+    try {
+      const result = await saveExportViaDesktop(
+        `/api/notes/${note.id}/export.md`,
+        noteExportName(note.title, note.id)
+      );
+      setExportMsg(result ? describeSaveResult(result) : "");
+    } catch (err) {
+      setExportMsg(err instanceof Error ? err.message : "导出失败");
     }
   }
 
@@ -1182,10 +1205,16 @@ export default function NoteView() {
           <a
             className="btn btn-ghost"
             href={`/api/notes/${note.id}/export.md`}
-            download={`note-${note.id}.md`}
+            download={noteExportName(note.title, note.id)}
+            onClick={exportNote}
           >
             导出 Markdown
           </a>
+          {exportMsg && (
+            <span className="hint" role="status">
+              {exportMsg}
+            </span>
+          )}
           <ConfirmButton
             className="btn btn-ghost danger"
             confirmLabel="确认删除"

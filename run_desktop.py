@@ -10,7 +10,10 @@
 """
 from __future__ import annotations
 
+import base64
+import logging
 import os
+import re
 import socket
 import sys
 import threading
@@ -23,6 +26,56 @@ def _pick_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+def _enable_downloads() -> bool:
+    """打开 pywebview 的下载开关（默认 False 会把下载静默取消）。
+
+    桌面版里「导出 Markdown / 备份数据库 / 下载附件」都是 <a download> 触发的下载。
+    pywebview 6.x 的 settings['ALLOW_DOWNLOADS'] 默认 False，会在
+    on_download_starting 里直接 args.Cancel = True 后 return —— 连「另存为」窗口都
+    不创建、也不报错，用户看到的就是"点了没反应"。必须在 webview.start() 之前打开。
+    """
+    try:
+        import webview
+
+        webview.settings["ALLOW_DOWNLOADS"] = True
+        return bool(webview.settings["ALLOW_DOWNLOADS"])
+    except Exception as exc:  # noqa: BLE001 - 开关失败不阻塞启动，仅记录
+        logging.getLogger(__name__).warning("打开下载开关失败：%s", exc)
+        return False
+
+
+_ILLEGAL_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\r\n\t]')
+
+
+def _safe_filename(name: str, fallback: str = "rednote-export") -> str:
+    """把用户可控的名字（如笔记标题）清洗成合法文件名：保留中文，去掉路径与非法字符。"""
+    cleaned = _ILLEGAL_FILENAME_CHARS.sub(" ", name or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip().rstrip(". ")
+    if not cleaned:
+        cleaned = fallback
+    stem, ext = os.path.splitext(cleaned)
+    stem = (stem.strip() or fallback)[:100].rstrip(". ")
+    return f"{stem}{ext}" if ext else stem
+
+
+def _default_save_dir() -> str:
+    """「另存为」的初始目录：优先系统下载目录，其次数据目录。"""
+    downloads = Path(os.environ.get("USERPROFILE") or Path.home()) / "Downloads"
+    if downloads.is_dir():
+        return str(downloads)
+    return os.getenv("REDNOTE_DATA_DIR") or "."
+
+
+def _file_types_for(filename: str) -> tuple[str, ...]:
+    """按扩展名给出「另存为」的文件类型过滤器（描述须为 ASCII，见 pywebview.parse_file_type）。"""
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".md":
+        return ("Markdown (*.md)",)
+    if suffix == ".db":
+        return ("SQLite backup (*.db)",)
+    return ("All files (*.*)",)
 
 
 def _setup_logging() -> None:
@@ -80,12 +133,63 @@ def _warm_http_client(url: str) -> None:
 class DesktopApi:
     """桌面壳暴露给前端的本地能力(js_api)：
     - choose_file(): 原生文件对话框，返回 {ok, path, name}；
-    - open_path(path): 用系统默认程序打开本地文件。
+    - choose_folder(): 原生「选择文件夹」对话框；
+    - open_path(path): 用系统默认程序打开本地文件；
+    - save_file(filename, content_b64): 原生「另存为」→ 把导出内容落盘并回传真实路径。
 
     注意：本对象绝不反向持有 window 引用——pywebview 自动暴露 js_api 时会递归
     遍历对象图，若 api 持有 window 会把整个窗口对象(含 .NET 控件代理)带进遍历，
     每次 getattr 生成新代理导致无限递归、窗口卡死。取窗口一律用 webview.windows。
     """
+
+    def __init__(self, save_dialog=None) -> None:
+        """save_dialog: 测试注入的假「另存为」((filename, initial_dir) -> 路径|None)；
+        为 None 时使用 pywebview 的原生对话框。"""
+        self._save_dialog = save_dialog
+
+    def _ask_save_path(self, filename: str) -> str | None:
+        """弹原生「另存为」，返回用户选定路径；取消返回 None。"""
+        initial_dir = _default_save_dir()
+        if self._save_dialog is not None:
+            return self._save_dialog(filename, initial_dir)
+
+        import webview
+
+        picked = webview.windows[0].create_file_dialog(
+            webview.FileDialog.SAVE,
+            directory=initial_dir,
+            save_filename=filename,
+            file_types=_file_types_for(filename),
+        )
+        if not picked:
+            return None
+        return str(picked[0] if isinstance(picked, (list, tuple)) else picked)
+
+    def save_file(self, filename: str, content_b64: str) -> dict:
+        """把前端取到的导出内容保存到用户选定位置，返回 {ok, path, bytes}。
+
+        前端从 /api/export/* 取内容并转 base64 后调用本方法；本方法只负责
+        "选路径 + 落盘"，因此导出格式仍由后端单一来源决定。
+        """
+        try:
+            data = base64.b64decode(content_b64 or "")
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"导出内容解码失败：{exc}"}
+
+        name = _safe_filename(filename)
+        try:
+            target = self._ask_save_path(name)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"无法打开保存对话框：{exc}"}
+        if not target:
+            return {"ok": False, "cancelled": True}
+
+        try:
+            path = Path(target)
+            path.write_bytes(data)
+        except OSError as exc:
+            return {"ok": False, "error": f"写入文件失败：{exc}"}
+        return {"ok": True, "path": str(path), "bytes": len(data)}
 
     def choose_file(self) -> dict:
         import webview
@@ -148,6 +252,8 @@ def main() -> int:
 
     import uvicorn
     import webview
+
+    _enable_downloads()  # 必须早于 webview.start()，否则导出/附件下载被静默取消
 
     port = int(os.getenv("REDNOTE_DESKTOP_PORT") or 0)
     if not port:

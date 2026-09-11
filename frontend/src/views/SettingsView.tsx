@@ -1,5 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { api } from "../api/client";
+import {
+  dateStamp,
+  describeSaveResult,
+  desktopSaveFile,
+  saveExportViaDesktop,
+} from "../lib/desktopSave";
 import { describeEngine, providerLabel, sendsToCloud } from "../lib/provider";
 import type { ProviderName, SettingsResponse } from "../types";
 
@@ -52,6 +58,26 @@ export default function SettingsView() {
   const [newPath, setNewPath] = useState("");
   const [storageBusy, setStorageBusy] = useState(false);
   const [storageMsg, setStorageMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // 导出/备份：桌面版走原生「另存为」并回显保存路径
+  const [exportMsg, setExportMsg] = useState("");
+
+  /** 下载式导出：桌面版交给桌面桥保存，浏览器保持 <a download> 行为。 */
+  async function downloadOrSave(
+    e: MouseEvent<HTMLAnchorElement>,
+    url: string,
+    filename: string
+  ) {
+    if (!desktopSaveFile()) return;
+    e.preventDefault();
+    setExportMsg("正在导出…");
+    try {
+      const result = await saveExportViaDesktop(url, filename);
+      setExportMsg(result ? describeSaveResult(result) : "");
+    } catch (err) {
+      setExportMsg(err instanceof Error ? err.message : "导出失败");
+    }
+  }
 
   useEffect(() => {
     api
@@ -385,12 +411,39 @@ export default function SettingsView() {
             Markdown——即使离开本应用，数据也始终归你。
           </p>
           <div className="data-actions">
-            <a className="btn btn-ghost btn-sm" href="/api/export/backup.db" download="rednote-backup.db">
+            <a
+              className="btn btn-ghost btn-sm"
+              href="/api/export/backup.db"
+              download={`rednote-backup-${dateStamp()}.db`}
+              onClick={(e) =>
+                downloadOrSave(
+                  e,
+                  "/api/export/backup.db",
+                  `rednote-backup-${dateStamp()}.db`
+                )
+              }
+            >
               备份数据库（.db）
             </a>
-            <a className="btn btn-ghost btn-sm" href="/api/export/notes.md" download="rednote-notes.md">
+            <a
+              className="btn btn-ghost btn-sm"
+              href="/api/export/notes.md"
+              download={`rednote-notes-${dateStamp()}.md`}
+              onClick={(e) =>
+                downloadOrSave(
+                  e,
+                  "/api/export/notes.md",
+                  `rednote-notes-${dateStamp()}.md`
+                )
+              }
+            >
               导出全部笔记（Markdown）
             </a>
+            {exportMsg && (
+              <span className="hint" role="status">
+                {exportMsg}
+              </span>
+            )}
           </div>
         </div>
       </section>
